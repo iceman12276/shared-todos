@@ -1,13 +1,13 @@
-# Resume State — shared-todos-app Initiative
+# Resume State — shared-todos-app Initiative (Restart #2)
 
-**Saved:** 2026-04-19 23:46 America/New_York
-**Reason for save:** User restarting session to enable Semgrep. All teammates + cron jobs will be lost on restart; this file captures everything needed to resume.
+**Saved:** 2026-04-19 ~23:46 America/New_York (second restart)
+**Reason for this save:** engineering-lead's frontmatter added `Bash` (at `~/.claude/agents/engineering-lead.md`), but the harness caches subagent-type tool lists at session start — so even a mid-session respawn doesn't pick up the new Bash tool. A full Claude Code session restart is needed so the subagent registration re-reads the updated .md file.
 
 ---
 
 ## One-line summary for the agent that resumes
 
-> Read this file in full, then read `docs/initiatives/2026-04-19-shared-todos-app.md` (the approved memo). Phase 4 (Planning) is complete and committed. Phase 5 (polling loop) and Phase 6 (Engineering) are next — not yet started. Re-spawn the three leads + meta-auditor into a fresh `shared-todos-app` team, re-arm the meta-auditor sweep cron, then dispatch Phase 6 to engineering-lead.
+> Read this file in full, then read `docs/initiatives/2026-04-19-shared-todos-app.md` (the approved memo). Phase 4 complete. Phase 6 is IN PROGRESS with an ADR committed locally on `feat/pr1-foundation` (commit `895bd1b`, not yet pushed) and `.github/workflows/ci.yml` authored in the worktree but uncommitted. Re-spawn the team, let engineering-lead commit the CI YAML + push both with their now-active Bash tool, then kick backend-dev into the FastAPI skeleton.
 
 ---
 
@@ -17,10 +17,12 @@
 |-------|-------|
 | Slug | `shared-todos-app` |
 | Repo | https://github.com/iceman12276/shared-todos (public) |
-| Branch | `master` |
-| Latest commit at save | `0f5a521` (Add BSD-3) |
+| Main working tree | `/home/isaac/Desktop/dev/shared-todos` |
+| PR-1 worktree | `/home/isaac/Desktop/dev/shared-todos-pr1` (branch `feat/pr1-foundation`) |
+| master HEAD (pushed) | `4ab5612` — Add RESUME.md |
+| feat/pr1-foundation HEAD (local-only) | `895bd1b` — Add ADR: WebSocket + Postgres NOTIFY for realtime |
 | Initiative memo | `docs/initiatives/2026-04-19-shared-todos-app.md` |
-| Status | APPROVED (Phase 4 complete, Phase 5+6 pending) |
+| Status | APPROVED — Phase 4 complete, Phase 6 in progress |
 
 ---
 
@@ -28,199 +30,180 @@
 
 | # | Phase | Status | Notes |
 |---|-------|--------|-------|
-| 0 | Prereqs + team create | ✅ complete | gh auth ✓, pentest tools ✓ (nmap/subfinder/whatweb/schemathesis), agents ✓ |
-| 1 | CEO meeting | ✅ complete | 3 leads' perspectives captured in memo |
-| 2 | Synthesize memo | ✅ complete | `docs/initiatives/2026-04-19-shared-todos-app.md` |
-| 3 | User approval gate | ✅ complete | APPROVED; Q1–Q6 answered (see memo) |
-| 4 | Planning (PRD + BSD) | ✅ complete | All 6 docs committed + pushed |
-| 5 | Start polling loop | ⏸ **NOT STARTED** — next up | Was marked in_progress in TaskList but never dispatched |
-| 6 | Engineering | ⏸ **NOT STARTED** — next up | Was marked in_progress in TaskList but never dispatched |
-| 7 | Stop loop + release pentest | pending | Requires Semgrep (hence the restart) |
-| 8 | Final release verdict | pending | - |
-| 9 | Meta-audit + cleanup | pending | - |
+| 0 | Prereqs + team create | ✅ complete | |
+| 1 | CEO meeting | ✅ complete | |
+| 2 | Synthesize memo | ✅ complete | |
+| 3 | User approval gate | ✅ complete | |
+| 4 | Planning (PRD + BSD) | ✅ complete | |
+| 5 | Start polling loop | ⏸ paused | Cron loop running before pause; re-arm on resume |
+| 6 | Engineering | 🚧 IN PROGRESS | ADR committed locally; CI authored-not-committed; backend-dev unbriefed |
+| 7 | Pentest | pending | Semgrep now installed ✓ |
+| 8 | Final verdict | pending | |
+| 9 | Meta-audit + cleanup | pending | |
 
 ---
 
-## User's authoritative decisions (from memo — DO NOT re-litigate)
+## User's authoritative decisions (unchanged from prior RESUME)
 
 | Q | Decision |
 |---|----------|
-| Q1. Sharing target | **Registered-users-only.** No email-invite to non-users. |
-| Q2. Permission roles | **Two roles: `viewer` (read-only) + `editor` (full CRUD on items).** Explicit in PRD-3 authz matrix. |
-| Q3. Auth providers | **Email + password AND Google OAuth.** Both in v1. |
-| Q4. Password reset | **IN v1.** Email service via mailhog/mailpit in dev/CI. |
-| Q5. Realtime sync | **HARD REQUIREMENT.** Collaborators see live changes. Engineering picks transport (WS/SSE/etc). |
-| Q6. GitHub remote | **Done.** Public repo at https://github.com/iceman12276/shared-todos. |
+| Q1. Sharing target | Registered-users-only |
+| Q2. Permission roles | Two roles: `viewer` (read-only) + `editor` (full CRUD on items) |
+| Q3. Auth providers | Email + password AND Google OAuth |
+| Q4. Password reset | IN v1 |
+| Q5. Realtime sync | HARD REQUIREMENT |
+| Q6. GitHub remote | https://github.com/iceman12276/shared-todos (public) |
 
-Revised effort estimate (from memo): planning 2–3d, engineering 3–4w (incl. ~1w for realtime), validation 7–10d, total ~4–5 weeks end-to-end.
+### Additional pinned rules surfaced during Phase 6 kickoff
 
----
-
-## Phase 4 deliverables — all committed to master
-
-### PRDs (under `docs/planning/`)
-
-| File | Commit | Summary |
-|------|--------|---------|
-| `prd-1-auth.md` | `59a6a9c` | Auth: register, login (email+pwd, Google OAuth), session cookies, password reset with mailhog/mailpit, rate-limit, CSRF double-submit |
-| `prd-2-lists-items.md` | `c74ae29` | Lists & items CRUD: field limits, cascade semantics, pagination |
-| `prd-3-sharing-permissions.md` | `5e0a58d` | Sharing & permissions: explicit authz matrix (4 roles × 10 actions), 7 realtime events, per-list + per-user channels, UUID list IDs |
-
-### BSDs (under `docs/planning/`)
-
-| File | Commit | Lines | Summary |
-|------|--------|-------|---------|
-| `bsd-1-auth.md` | `f698c73` | 725 | Auth screens: register, login, OAuth, forgot/reset password — all states (loading/success/error/edge) + global design tokens |
-| `bsd-2-lists-items.md` | `21b78fd` | 681 | Dashboard + list-detail + item interactions: empty/loading/populated/optimistic/conflict-resolved states, realtime-event rendering |
-| `bsd-3-sharing-permissions.md` | `0f5a521` | 587 | Invite flow, member management, role badges, realtime presence + "recently updated by X" indicators, access-revoked UX |
-
-### Supporting commits
-
-- `71aaf67` — initial initiative memo
-- `8b06e38` — `.gitignore` for `.claude/`
+- **OQ-1 RESOLVED by validation-lead:** stranger → 404 on EVERY verb (GET, PATCH, POST, DELETE, share, revoke — every action against a list the caller can't read). NEVER 403. Mixed 404/403 reintroduces list-existence enumeration. This is a hard rule for backend-dev's authz implementation.
+- **Realtime transport DECIDED by engineering-lead** (documented in ADR `895bd1b`): WebSocket over `/ws/v1/lists/{list_id}` + per-user channel `/ws/v1/user`, fan-out via Postgres LISTEN/NOTIFY inside the backend process. Single-backend-replica ceiling accepted for v1. Channel abstraction to be swap-ready for Redis pub/sub at v2.
 
 ---
 
-## Open questions carried forward
+## Git state — CRITICAL for resume
 
-### OQ-1: 404 vs 403 for stranger access to a list (from PRD-3)
+### Committed to master (pushed to origin)
+- `4ab5612` Add RESUME.md (prior save)
+- `0f5a521` Add BSD-3
+- `21b78fd` Add BSD-2
+- `f698c73` Add BSD-1
+- `8b06e38` Ignore .claude/
+- `5e0a58d` Add PRD-3
+- `59a6a9c` Add PRD-1
+- `c74ae29` Add PRD-2
+- `71aaf67` Initiative memo
 
-PM recommends **404** to prevent list-existence enumeration. Needs validation-lead confirmation in Phase 6. **Do not block engineering on this** — it's a response-code detail, not a spec-shaping question. Validation-lead should confirm during per-PR review of the first endpoint that returns this status.
+### LOCAL-only commit on `feat/pr1-foundation` (NOT pushed)
+- `895bd1b` Add ADR: WebSocket + Postgres NOTIFY for realtime
+  - Path: `docs/architecture/realtime-transport-decision.md` (171 lines)
+  - Authored by engineering-lead (body includes Why/Considered/Trade-offs for WS+LISTEN/NOTIFY choice vs SSE/short-poll/Redis-broker/managed-realtime/CDC/etc)
+  - Committed by orchestrator on eng-lead's behalf (Option B — eng-lead didn't have Bash yet)
+
+### Uncommitted in worktree `/home/isaac/Desktop/dev/shared-todos-pr1/`
+- `.github/workflows/ci.yml` — written to disk by engineering-lead, not yet committed
+  - Per engineering-lead's task plan: backend lane (ruff, mypy --strict, pytest with real Postgres + mailhog services, semgrep, gitleaks) + test-quality gate. Frontend lane deferred until frontend-dev starts.
+  - engineering-lead was about to send COMMIT_REQUEST 2/2 when the Bash gap was discovered.
+
+### Remote branches
+- `origin/master` @ 4ab5612 (tracks local master)
+- No `origin/feat/pr1-foundation` yet — will be created on first push.
 
 ---
 
-## Team + agent state — everything below is LOST on restart, must be recreated
+## Config + agent file changes (persisted; survive restart)
 
-### Team
-- Team name: `shared-todos-app`
-- Config: `~/.claude/teams/shared-todos-app/config.json` (file may persist, but agents are dead)
+All applied mid-session:
 
-### Teammates alive at save (all need re-spawn if work resumes with them)
+### `~/.claude/hooks/domain-config.yaml`
+- **backend-dev**: added `backend/**`, `**/backend/**`, `pyproject.toml`, `**/pyproject.toml`, `uv.lock`, `**/uv.lock`, `.python-version`, `**/.python-version`, `docker-compose.yml`, `**/docker-compose.yml`, `docker-compose.*.yml`, `**/docker-compose.*.yml`
+- **frontend-dev**: added `frontend/**`, `**/frontend/**`, `package.json`, `**/package.json`, `package-lock.json`, `**/package-lock.json`, `.nvmrc`, `**/.nvmrc`, `vite.config.ts`, `**/vite.config.ts`, `tsconfig*.json`, `**/tsconfig*.json`
+- **engineering-lead**: was memory-only; now has `docs/architecture/**`, `**/docs/architecture/**`, `.github/workflows/**`, `**/.github/workflows/**`
 
-| Name | Type | Role | Work done in prior session |
-|------|------|------|----------------------------|
-| planning-lead | planning-lead | Planning team lead | Drove PRDs + BSDs; PM ran into stale-resend loop late but was harmless |
-| engineering-lead | engineering-lead | Engineering team lead | Gave CEO perspective; never actually kicked off implementation |
-| validation-lead | validation-lead | Validation team lead | Gave CEO perspective; never activated |
-| product-manager | product-manager | Wrote PRD-1/2/3 | Done. Phase 4 complete for PM. Probably don't re-spawn unless revisions needed. |
-| ux-designer | ux-designer | Wrote BSD-1/2/3 + Figma wireframes | Done. Phase 4 complete for UX. Probably don't re-spawn unless revisions needed. |
-| meta-auditor | meta-auditor | Roaming observer | Produced Sweep 1 (1 HIGH, 1 MED, 1 LOW) + Sweep 2 (1 MED). Findings are in their MEMORY.md — persists across sessions. |
+### `~/.claude/hooks/skills-config.yaml`
+- Added `commit-discipline` to: product-manager, ux-designer, security-reviewer, pentester, validation-lead, meta-auditor, **engineering-lead**
+
+### `~/.claude/hooks/tools-config.yaml`
+- Added `Bash` to: ux-designer, pentester, validation-lead (security-reviewer + meta-auditor already had it; backend-dev/frontend-dev already have it)
+
+### `~/.claude/agents/*.md` — body updates
+- All 7 agents (product-manager, ux-designer, security-reviewer, pentester, validation-lead, meta-auditor, **engineering-lead**): added `**Before committing your deliverable:** invoke commit-discipline` trigger line + updated `Your skills:` list.
+- **engineering-lead.md**: body expanded with the ownership-exception paragraph (`docs/architecture/**` + `.github/workflows/**` now explicit carve-outs from "you never write code").
+
+### `~/.claude/agents/engineering-lead.md` — FRONTMATTER
+- Added `- Bash` to the `tools:` list.
+- **This is the change requiring the full session restart** — the harness caches subagent-type tool lists at session start, so this Bash addition only takes effect on a fresh Claude Code session.
+
+---
+
+## Team + agent state — LOST on restart
+
+All teammates will need re-spawn. Their persistent memory (`~/.claude/agent-memory/<agent>/MEMORY.md`) survives.
+
+### At save time (all paused + idle)
+| Name | Status at pause | Last notable action |
+|------|-----------------|---------------------|
+| planning-lead | idle, holding | Acked PAUSE |
+| engineering-lead | idle, holding | Authored ADR + ci.yml, blocked on Bash, idled after orchestrator said "go Option B" |
+| validation-lead | idle, holding | Orientation done; will fire per-PR validation pipeline when polling loop dispatches |
+| meta-auditor | idle, holding | 13 sweeps completed; memory loaded with findings; watching for first real commit |
+| backend-dev | idle, holding | Feat branch created, Python 3.12 confirmed, worktree exists; waiting for eng-lead's kickoff |
 
 ### Cron jobs lost on restart
-
-- `e2adfa09` (now cancelled) — meta-auditor sweep loop, fired every 2 min. **Re-arm after restart** if you want active sweeps again. The resume agent should decide whether to restart this.
-
----
-
-## Task list (for reconstruction if TaskList state is lost)
-
-```
-#1  [completed]   Phase 1: CEO meeting with three leads
-#2  [completed]   Phase 2: Synthesize CEO memo
-#3  [completed]   Phase 3: User approval gate
-#4  [completed]   Phase 4: Planning (PRD + BSD)
-#5  [in_progress] Phase 5: Start validate-new-prs polling loop   ← resume HERE
-#6  [in_progress] Phase 6: Engineering (backend + frontend)       ← resume HERE
-#7  [pending]     Phase 7: Stop loop + release pentest
-#8  [pending]     Phase 8: Final release verdict
-#9  [pending]     Phase 9: Meta-audit + cleanup
-#10 [completed]   Write PRD-2: Lists & Items CRUD
-#11 [completed]   Write PRD-1: Auth
-#12 [completed]   Write PRD-3: Sharing & Permissions
-#13 [completed]   Write BSD-1: Auth flows
-#14 [completed]   Write BSD-2: Lists dashboard + item interactions
-#15 [completed]   Write BSD-3: Sharing UI + realtime indicators
-```
-
-Task store on disk (may persist across restart): `~/.claude/tasks/shared-todos-app/`
-
----
-
-## Meta-auditor findings so far (from their session replies)
-
-Full details in meta-auditor's MEMORY.md, but the high-level items to carry forward:
-
-1. **[HIGH]** Planning-lead's briefing to PM told PM to commit/push, but PM allowlist doesn't allow Bash/git. Resolved by orchestrator committing on PM's behalf. **Action item for post-init:** either update PM/UX agent-file briefings to say "orchestrator will commit" OR update the allowlist. Documenting — don't mid-flight change.
-2. **[MED]** Session churn — planning-lead + PM each had 10+ sessions re-doing spawn protocol. Token-expensive. Not blocking.
-3. **[MED]** UX wrote BSDs to `bsd/` at repo root instead of `docs/planning/`. Orchestrator moved them pre-commit. Worth pinning explicit save-path in BSD briefing template.
-4. **[LOW]** planning-lead doesn't invoke `mental-model` skill on spawn (engineering-lead + validation-lead do). Agent-file inconsistency.
-5. **[LOW]** product-manager doesn't invoke `follow-the-plan` on spawn despite receiving directives. Agent-file tuning opportunity.
+Both were running before the pause:
+- meta-auditor sweep loop (2-min cadence). Sweep counter was at #13 (next would be #14).
+- validate-new-prs polling loop (5-min cadence).
 
 ---
 
 ## Exact next actions for the resuming agent
 
-When the user says "resume" or similar after restart:
-
-1. **Verify prereqs again** (clean slate):
+1. **Verify prereqs**:
    - `gh auth status`
-   - `which nmap subfinder whatweb schemathesis semgrep`  ← semgrep must now be present (that's why they restarted)
-   - Verify `git remote get-url origin` returns the GitHub URL
-   - `git log --oneline -3` should show the BSD-3 commit `0f5a521` at top
+   - `which semgrep nmap subfinder whatweb schemathesis`
+   - `git remote get-url origin`
+   - `git log --oneline -3` — should show `4ab5612` at top of master
+   - `git branch -a` — should show local `feat/pr1-foundation` pointing at `895bd1b`
+   - `ls /home/isaac/Desktop/dev/shared-todos-pr1/.github/workflows/ci.yml` — should exist
 
-2. **Re-spawn the team:**
-   ```
-   TeamCreate(team_name: "shared-todos-app", agent_type: "orchestrator", ...)
-   Agent(team_name: "shared-todos-app", name: "planning-lead",    subagent_type: "planning-lead",    run_in_background: true, prompt: "Respawned mid-initiative after a restart. Phase 4 complete. Stand by, no new work yet.")
-   Agent(team_name: "shared-todos-app", name: "engineering-lead", subagent_type: "engineering-lead", run_in_background: true, prompt: "Respawned after restart. Initiative memo at docs/initiatives/2026-04-19-shared-todos-app.md, resume state at docs/initiatives/RESUME.md. Stand by for Phase 6 kickoff directive.")
-   Agent(team_name: "shared-todos-app", name: "validation-lead",  subagent_type: "validation-lead",  run_in_background: true, prompt: "Respawned after restart. Stand by.")
-   Agent(team_name: "shared-todos-app", name: "meta-auditor",     subagent_type: "meta-auditor",     run_in_background: true, prompt: "Respawned after restart. Your MEMORY.md has findings from the prior session — read it. Active sweep mode still applies (every 2 min, ≤80 word reports). Resume sweep loop when orchestrator tells you.")
-   ```
+2. **Re-create the team** via TeamCreate(team_name: "shared-todos-app", ...).
 
-3. **Skip Phase 5 skill auto-invoke** — the `validate-new-prs` polling loop skill needs to be re-started separately. Orchestrator should invoke:
-   ```
-   Skill(skill: "loop", args: "5m validate-new-prs")
-   ```
+3. **Re-spawn 5 teammates** (skip PM + UX; their work is done):
+   - `planning-lead` — "Respawned after 2nd restart. Phase 4 complete; stand by."
+   - `engineering-lead` — "Respawned after 2nd restart. You NOW HAVE `Bash` in your tool surface. Phase 6 in progress: ADR `895bd1b` committed on local `feat/pr1-foundation`, `.github/workflows/ci.yml` authored but uncommitted at `/home/isaac/Desktop/dev/shared-todos-pr1/.github/workflows/ci.yml`. Your first action: run commit-discipline, then `git add .github/workflows/ci.yml && git commit -m '<body>' && git push -u origin feat/pr1-foundation` — this push creates the remote branch with both commits. Then brief backend-dev to start the FastAPI skeleton."
+   - `validation-lead` — "Respawned. Stand by for per-PR validation dispatch from the polling loop."
+   - `meta-auditor` — "Respawned. Read your MEMORY.md for prior findings. Sweep counter was at #13; next is #14. Active sweep mode: orchestrator will restart the 2-min cron."
+   - `backend-dev` — "Respawned. Worktree exists at /home/isaac/Desktop/dev/shared-todos-pr1. Branch `feat/pr1-foundation` local. Python 3.12 confirmed. Stand by for engineering-lead's kickoff brief once they push the ADR + CI."
 
-4. **Re-arm the meta-auditor sweep cron** (optional — only if user wants active sweeps):
-   ```
-   CronCreate(cron: "*/2 * * * *", recurring: true, prompt: "Ping meta-auditor via SendMessage with 'Sweep #N — run the active-sweep checklist and reply with ≤80 word status' prompt (increment N each time)...")
-   ```
+4. **Re-arm both cron loops**:
+   - `CronCreate("*/2 * * * *", recurring: true, prompt: "Ping meta-auditor with 'Sweep #N' — N starts at 14 and increments each fire")`
+   - `CronCreate("*/5 * * * *", recurring: true, prompt: "validate-new-prs")`
 
-5. **Dispatch Phase 6 to engineering-lead** (the meat of the resume):
-   ```
-   SendMessage(to: "engineering-lead", message: <full Phase 6 directive — memo path, PRD paths, BSD paths, implementation order backend-first then frontend, commit-discipline, OQ-1 flag>)
-   ```
+5. **Watch for engineering-lead's first action**: they should invoke `commit-discipline`, then Bash git commands natively. Verify Bash is now actually enabled; if they still report Bash missing, the frontmatter edit didn't take effect and something is wrong — stop and investigate.
 
-6. **Mark task #5 + #6 status accordingly** once polling loop + engineering are in flight.
+6. **Once feat/pr1-foundation is pushed**: polling loop will NOT pick it up (no PR yet — just a branch). That's fine. backend-dev builds on top, then eng-lead or backend-dev opens PR-1.
 
 ---
 
-## Phase 6 directive template (paste into engineering-lead brief on resume)
+## Drafted CI YAML commit body (engineering-lead's context)
+
+Engineering-lead had drafted the CI YAML and was preparing a COMMIT_REQUEST for it when Bash was discovered missing. After respawn with Bash present, they should compose and commit the CI YAML themselves via their own `commit-discipline` + Bash workflow. No need to pre-draft here — they know what they wrote.
+
+If they need a nudge on format, the template for the ADR commit (commit `895bd1b`) is the exemplar for the CI YAML commit body:
+- Subject: `Add CI: <one-line description>` (≤50 chars)
+- Why: connect to a PRD/BSD/memo requirement
+- Considered: alternatives evaluated (other CI configs, deferring CI, etc.)
+- Trade-offs: runtime cost, coverage gaps, flakiness risks, etc.
+- `Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>` trailer
+
+---
+
+## Task list at save
 
 ```
-Initiative approved — begin engineering phase. Planning is complete.
-
-**Memo:** docs/initiatives/2026-04-19-shared-todos-app.md
-**PRDs:** docs/planning/prd-1-auth.md, prd-2-lists-items.md, prd-3-sharing-permissions.md
-**BSDs:** docs/planning/bsd-1-auth.md, bsd-2-lists-items.md, bsd-3-sharing-permissions.md
-**Repo:** https://github.com/iceman12276/shared-todos (master)
-
-**Scope reminders from user decisions:**
-- Registered-users-only sharing; viewer/editor roles; email+password + Google OAuth; password reset in v1; realtime sync HARD REQUIREMENT.
-- Stack (from your CEO perspective): FastAPI/SQLAlchemy/Postgres backend, React/Vite/TanStack Query frontend, httpOnly SameSite=Lax session cookies.
-
-**Your phase:**
-1. Use `zero-micromanagement` before delegating.
-2. Order: backend-first (API contract, CI scaffold in the first PR — do NOT defer CI), then frontend against BSDs + API contract.
-3. Request spawn of backend-dev; delegate backend implementation per PRDs. Insist on TDD, commit-discipline, integration tests that boot the real app (from user's rules/coding-principles.md), per-endpoint authz matrix test covering {owner, editor, viewer, stranger} × {read, write, share, delete}.
-4. When backend PRs are green + merged via polling-loop validation, spawn frontend-dev.
-5. Carry forward OQ-1 (404 vs 403 for stranger access — validation-lead to confirm; don't block on it).
-6. Polling loop is running in the background — every PR is auto-validated. Your job is implementation.
-7. Report back when all PRs merged + feature-complete.
-
-Use the spawn-request protocol — do not spawn workers yourself.
+#1 [in_progress] Phase 5: validate-new-prs polling loop
+#2 [in_progress] Phase 6: Engineering (backend + frontend)   ← owner: engineering-lead
+#3 [pending]     Phase 7: Stop loop + release pentest
+#4 [pending]     Phase 8: Final release verdict
+#5 [pending]     Phase 9: Meta-audit + cleanup
+#6 [completed]   Author realtime-transport-decision.md
+#7 [completed]   Author .github/workflows/ci.yml (backend lane + quality gates)
+#8 [pending]     Commit + push arch doc and CI workflow to feat/pr1-foundation   ← ADR done (895bd1b), CI pending
+#9 [pending]     Brief backend-dev to start FastAPI skeleton
 ```
 
----
-
-## Watch-outs for the resuming agent
-
-- **Don't commit on behalf of planning workers again** — Phase 4 is done, so this shouldn't recur. If engineering workers hit a similar block, escalate — they should have Bash + git access per their agent files.
-- **Stale-resend loop pattern** — planning-lead and PM both exhibited it; expect engineering workers might too. If a teammate re-sends the same "done" summary 3+ times, send them a direct "acknowledged, you're done, go idle" message; don't just wait it out.
-- **Realtime is the highest-risk piece** of engineering. Insist on engineering-lead picking the transport (WS vs SSE vs Pusher-equivalent) and documenting the choice in a decision doc before implementation starts.
-- **Authz matrix test is non-negotiable** — all three leads flagged IDOR as top risk.
+Task store on disk: `~/.claude/tasks/shared-todos-app/`. Should survive restart, but verify via TaskList after team re-create.
 
 ---
 
-## End of resume file.
+## Watch-outs
+
+- **Bash test first for eng-lead on respawn:** before briefing them on Phase 6, have them verify Bash is actually available (`git status` as a smoke test). If missing still, the frontmatter edit didn't persist — abort and fix the .md before continuing.
+- **feat/pr1-foundation has ONE commit ahead of master already** — the ADR `895bd1b`. Don't lose this. Any "reset/rebuild the branch" impulse should be rejected.
+- **Stale system prompts won't bite now**: all agents respawning post-restart will load the updated .md files fresh.
+- **Sweep counter continuity:** meta-auditor's MEMORY.md has sweeps #1–#13. Tell them #14 is next on respawn.
+- **Don't re-do the config changes:** domain/skills/tools configs are all on-disk and correct. Just verify on resume; don't re-edit.
+
+---
+
+## End of resume file (v2).
