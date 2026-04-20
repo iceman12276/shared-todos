@@ -8,6 +8,9 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 from alembic import context
 from app.config import settings
 from app.db.base import Base
+import app.models.user  # noqa: F401 — registers User with Base.metadata
+import app.models.session  # noqa: F401 — registers Session with Base.metadata
+import app.models.password_reset_token  # noqa: F401 — registers PasswordResetToken with Base.metadata
 
 config = context.config
 
