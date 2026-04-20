@@ -3,6 +3,7 @@
 This test was recommended in the PR-1 validation report as a natural addition
 alongside the first real migration.
 """
+
 import pytest
 
 from alembic import command

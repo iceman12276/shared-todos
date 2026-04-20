@@ -6,6 +6,7 @@ subsequent attempts raise 429.
 This is an in-memory implementation suitable for v1 single-replica. For
 multi-replica deployments, replace the _store dict with a Redis backend.
 """
+
 from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 from threading import Lock

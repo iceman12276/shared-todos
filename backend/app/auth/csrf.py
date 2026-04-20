@@ -10,6 +10,7 @@ Exemptions:
 - /api/v1/auth/oauth/* — GET-only flow; callback is GET
 - All GET/HEAD/OPTIONS requests (safe verbs per RFC 7231)
 """
+
 import secrets
 
 from fastapi import Request, Response, status
@@ -28,9 +29,7 @@ _CSRF_HEADER = "x-csrf-token"
 
 
 class CSRFMiddleware(BaseHTTPMiddleware):
-    async def dispatch(
-        self, request: Request, call_next: RequestResponseEndpoint
-    ) -> Response:
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         if request.method not in _MUTATING_METHODS:
             return await call_next(request)
 

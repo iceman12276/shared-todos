@@ -1,5 +1,7 @@
 """Lightweight structural tests — verify model columns without hitting the DB."""
 
+from typing import Any
+
 import sqlalchemy as sa
 
 from app.models.password_reset_token import PasswordResetToken
@@ -7,7 +9,7 @@ from app.models.session import Session
 from app.models.user import User
 
 
-def _col(model: type, name: str) -> sa.Column:  # type: ignore[type-arg]
+def _col(model: type, name: str) -> Any:
     return model.__table__.c[name]  # type: ignore[attr-defined]
 
 

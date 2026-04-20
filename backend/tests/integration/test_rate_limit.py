@@ -1,4 +1,5 @@
 """Rate limiting integration test: 11th failed login attempt → 429 (US-102)."""
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 

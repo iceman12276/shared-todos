@@ -9,6 +9,7 @@ initiates OAuth and sends the callback URL to a victim.
 The httpx client is injectable as a FastAPI dependency so tests can provide
 a pre-configured mock transport without needing global HTTP interception.
 """
+
 import base64
 import json
 import secrets
@@ -33,6 +34,7 @@ async def get_http_client() -> AsyncGenerator[httpx.AsyncClient, None]:
     """Dependency that yields a shared httpx client. Override in tests."""
     async with httpx.AsyncClient() as client:
         yield client
+
 
 _GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 _GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"  # noqa: S105
@@ -193,9 +195,7 @@ async def oauth_google_callback(
 
     # Find existing user by google_sub or email (account linking)
     result = await db.execute(
-        select(User).where(
-            (User.google_sub == google_sub) | (User.email == email)
-        )
+        select(User).where((User.google_sub == google_sub) | (User.email == email))
     )
     user = result.scalar_one_or_none()
 

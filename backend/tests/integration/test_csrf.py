@@ -4,6 +4,7 @@ Mutating verbs (POST, PUT, PATCH, DELETE) on protected routes require
 matching X-CSRF-Token header and csrf_token cookie.
 Login and register are exempt (no session yet).
 """
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 

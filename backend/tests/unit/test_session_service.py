@@ -32,6 +32,7 @@ async def test_create_session_returns_token(db_session: AsyncSession, sample_use
 async def test_create_session_stores_in_db(db_session: AsyncSession, sample_user: User) -> None:
     token = await create_session(db_session, sample_user.id, ttl_days=7)
     from sqlalchemy import select
+
     result = await db_session.execute(select(Session).where(Session.token == token))
     row = result.scalar_one_or_none()
     assert row is not None

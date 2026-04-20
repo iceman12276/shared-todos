@@ -1,4 +1,5 @@
 """Integration tests for register and login endpoints (US-101, US-102)."""
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 
@@ -156,7 +157,7 @@ async def test_logout_invalidates_session(client: AsyncClient) -> None:
             json={"email": "logout@example.com", "password": "correcthorsebattery1"},
         )
         # Logout — must include CSRF header (logout is not exempt)
-        csrf = login_r.cookies.get("csrf_token", "")
+        csrf: str = login_r.cookies.get("csrf_token") or ""
         logout_r = await c.post("/api/v1/auth/logout", headers={"X-CSRF-Token": csrf})
         assert logout_r.status_code == 204
         # Old cookie should now be unauthorized

@@ -1,4 +1,5 @@
 """Password reset flow integration tests (US-106, US-107)."""
+
 from datetime import UTC
 
 import pytest
@@ -32,7 +33,7 @@ async def test_reset_request_opaque_for_registered_email() -> None:
             "/api/v1/auth/register",
             json={"email": "reset@example.com", "password": "correcthorsebattery1"},
         )
-        csrf = reg_r.cookies.get("csrf_token", "")
+        csrf: str = reg_r.cookies.get("csrf_token") or ""
         r = await c.post(
             "/api/v1/auth/password-reset/request",
             json={"email": "reset@example.com"},
@@ -114,7 +115,7 @@ async def test_reset_complete_success_invalidates_all_sessions() -> None:
             json={"email": email, "password": "correcthorsebattery1"},
         )
         old_session_token = login_r.cookies["session"]
-        csrf = login_r.cookies.get("csrf_token", "")
+        csrf: str = login_r.cookies.get("csrf_token") or ""
 
         # Create a reset token directly in DB
         async with async_session_factory() as db:
@@ -161,7 +162,7 @@ async def test_reset_complete_used_token_rejected(client: AsyncClient) -> None:
             "/api/v1/auth/register",
             json={"email": email, "password": "correcthorsebattery1"},
         )
-        csrf = reg_r.cookies.get("csrf_token", "")
+        csrf: str = reg_r.cookies.get("csrf_token") or ""
         async with async_session_factory() as db:
             result = await db.execute(select(User).where(User.email == email))
             user = result.scalar_one()

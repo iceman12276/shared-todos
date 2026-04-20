@@ -1,4 +1,5 @@
 """Email sending via SMTP (mailhog in dev, real SMTP in prod)."""
+
 from email.message import EmailMessage
 
 import aiosmtplib

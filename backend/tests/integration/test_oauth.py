@@ -3,8 +3,10 @@
 Uses FastAPI dependency override to inject a mock httpx client,
 avoiding the need to intercept real network calls globally.
 """
+
 import base64
 import json
+from collections.abc import AsyncGenerator, Generator
 from urllib.parse import parse_qs, urlparse
 
 import httpx
@@ -30,14 +32,15 @@ FAKE_ID_TOKEN_PAYLOAD = {
 
 def _make_fake_id_token() -> str:
     header = base64.urlsafe_b64encode(b'{"alg":"RS256"}').rstrip(b"=").decode()
-    payload = base64.urlsafe_b64encode(
-        json.dumps(FAKE_ID_TOKEN_PAYLOAD).encode()
-    ).rstrip(b"=").decode()
+    payload = (
+        base64.urlsafe_b64encode(json.dumps(FAKE_ID_TOKEN_PAYLOAD).encode()).rstrip(b"=").decode()
+    )
     return f"{header}.{payload}.fakesig"
 
 
 def _make_mock_http_client() -> httpx.AsyncClient:
     """Return an httpx client with a mock transport for Google endpoints."""
+
     def handler(request: httpx.Request) -> httpx.Response:
         if "oauth2.googleapis.com/token" in str(request.url):
             return httpx.Response(
@@ -52,10 +55,10 @@ def _make_mock_http_client() -> httpx.AsyncClient:
 
 
 @pytest.fixture(autouse=False)
-def override_http_client():  # type: ignore[no-untyped-def]
+def override_http_client() -> Generator[None, None, None]:
     mock_client = _make_mock_http_client()
 
-    async def _get_mock_client():  # type: ignore[return]
+    async def _get_mock_client() -> AsyncGenerator[httpx.AsyncClient, None]:
         yield mock_client
 
     app.dependency_overrides[get_http_client] = _get_mock_client
