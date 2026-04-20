@@ -1,0 +1,181 @@
+name: ci
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+
+  backend:
+    name: backend (lint + type + test)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: shared_todos
+          POSTGRES_PASSWORD: shared_todos
+          POSTGRES_DB: shared_todos_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U shared_todos -d shared_todos_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+      mailhog:
+        image: mailhog/mailhog:latest
+        ports:
+          - 1025:1025
+          - 8025:8025
+    env:
+      DATABASE_URL: postgresql+psycopg://shared_todos:shared_todos@localhost:5432/shared_todos_test
+      SMTP_HOST: localhost
+      SMTP_PORT: "1025"
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read .python-version
+        id: python-version
+        run: |
+          if [ -f .python-version ]; then
+            echo "version=$(cat .python-version)" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=3.12" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ steps.python-version.outputs.version }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+
+      - name: Install dependencies (frozen)
+        run: uv sync --frozen
+
+      - name: Lint (ruff)
+        run: uv run ruff check .
+
+      - name: Format check (ruff format)
+        run: uv run ruff format --check .
+
+      - name: Type check (mypy --strict)
+        run: uv run mypy --strict .
+
+      - name: Run migrations against real Postgres
+        run: uv run alembic upgrade head
+
+      - name: Test (pytest, real services)
+        run: uv run pytest -v
+
+  test-quality-gate:
+    name: test-quality gate (no skipped/empty tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Disallow unconditional test skips
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -d backend/tests ]; then
+            if grep -RnE --include='*.py' \
+                -e '^\s*@pytest\.mark\.skip(\s*\(|\s*$)' \
+                -e '^\s*pytest\.skip\(' \
+                backend/tests; then
+              echo "::error::Unconditional pytest.mark.skip / pytest.skip found. Use skipif with a condition or delete the test."
+              exit 1
+            fi
+          fi
+          if [ -d frontend ]; then
+            if grep -RnE --include='*.ts' --include='*.tsx' --include='*.js' --include='*.jsx' \
+                -e '(^|\s)(xit|xdescribe|xtest)\(' \
+                -e '(it|test|describe)\.skip\(' \
+                frontend; then
+              echo "::error::Unconditional test skip (xit/xdescribe/.skip) found. Use conditional skip or delete the test."
+              exit 1
+            fi
+          fi
+          echo "OK: no unconditional skips found."
+
+      - name: Disallow empty test bodies (python)
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -d backend/tests ]; then
+            if grep -RPzo --include='*.py' \
+                '(?s)def test_[A-Za-z0-9_]+\([^)]*\)[^:]*:\s*(?:"""[^"]*"""\s*)?(?:pass|\.\.\.)\s*(?:#[^\n]*)?\n' \
+                backend/tests | grep -q .; then
+              echo "::error::Empty test body detected in backend/tests (def test_* with only pass/...). Write a real assertion or delete the test."
+              exit 1
+            fi
+          fi
+          echo "OK: no empty test bodies found."
+
+      - name: Disallow type-escape hatches in tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -d backend/tests ]; then
+            if grep -RnE --include='*.py' '^\s*#\s*type:\s*ignore' backend/tests; then
+              echo "::error::'# type: ignore' in test files. Tests must exercise the real typed surface."
+              exit 1
+            fi
+          fi
+          if [ -d frontend ]; then
+            found_any=0
+            while IFS= read -r -d '' d; do
+              if grep -RnE --include='*.ts' --include='*.tsx' --include='*.js' --include='*.jsx' \
+                  'as[[:space:]]+any\b' "$d"; then
+                found_any=1
+              fi
+            done < <(find frontend -type d \( -name tests -o -name __tests__ \) -print0)
+            if [ "$found_any" -eq 1 ]; then
+              echo "::error::'as any' in frontend test files. Tests must exercise the real typed surface."
+              exit 1
+            fi
+          fi
+          echo "OK: no type escape hatches in test files."
+
+  security-gate:
+    name: security gate (semgrep + gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python (for semgrep)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install semgrep
+        run: pip install semgrep
+
+      - name: Semgrep scan (SAST + supply-chain)
+        env:
+          SEMGREP_RULES: "p/default p/python p/owasp-top-ten p/secrets"
+        run: semgrep ci --error
+
+      - name: Gitleaks (secret scan)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
