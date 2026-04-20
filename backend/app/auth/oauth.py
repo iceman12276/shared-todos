@@ -36,7 +36,6 @@ async def get_http_client() -> AsyncGenerator[httpx.AsyncClient, None]:
 
 _GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 _GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"  # noqa: S105
-_GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v3/userinfo"
 
 _COOKIE_NAME = "session"
 _NONCE_COOKIE = "oauth_state_nonce"
