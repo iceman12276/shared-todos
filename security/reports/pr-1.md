@@ -1,9 +1,10 @@
 # Security Review: PR #1
 
-**Verdict:** FAIL
+**Verdict (current):** CLEAN — v2 @ f8f9fad (2026-04-20)
+**Verdict (v1):** FAIL — REQUEST_CHANGES @ c19da03 (2026-04-20) — see v1 findings below
 **Reviewer:** security-reviewer
 **Date:** 2026-04-20
-**Scope:** `.github/workflows/ci.yml`, `backend/app/main.py`, `backend/app/config.py`, `backend/app/db/base.py`, `backend/alembic/env.py`, `backend/uv.lock` (34 packages)
+**Scope:** `.github/workflows/ci.yml`, `backend/app/main.py`, `backend/app/config.py`, `backend/app/db/base.py`, `backend/alembic/env.py`, `backend/uv.lock` (34 packages v1 / 35 packages v2)
 **Branch:** `feat/pr1-foundation` → `master`
 
 ---
