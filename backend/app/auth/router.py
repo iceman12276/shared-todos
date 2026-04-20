@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import require_auth
 from app.auth.password import hash_password, verify_password
+from app.auth.rate_limiter import check_login_rate_limit, record_failed_login, reset_failed_logins
 from app.auth.schemas import LoginRequest, RegisterRequest, UserOut
 from app.auth.session import (
     create_session,
@@ -68,27 +69,33 @@ async def register(
 @router.post("/login", status_code=status.HTTP_200_OK)
 async def login(
     body: LoginRequest,
+    request: Request,
     response: Response,
     db: AsyncSession = Depends(get_session),
 ) -> dict:  # type: ignore[type-arg]
+    check_login_rate_limit(request)
+
     result = await db.execute(select(User).where(User.email == body.email))
     user = result.scalar_one_or_none()
 
     # Anti-enumeration: check password even if user not found (constant-time path)
     if user is None or user.password_hash is None:
-        # Still do a dummy verify to avoid timing side-channel
+        # Still do a dummy hash to avoid timing side-channel on missing user
         hash_password("dummy-timing-equalization")
+        record_failed_login(request)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=_GENERIC_AUTH_ERROR,
         )
 
     if not verify_password(body.password, user.password_hash):
+        record_failed_login(request)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=_GENERIC_AUTH_ERROR,
         )
 
+    reset_failed_logins(request)
     token = await create_session(db, user.id, ttl_days=settings.session_ttl_days)
     _set_session_cookie(response, token)
     return {"user": _user_out(user)}
