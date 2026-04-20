@@ -1,7 +1,8 @@
 from collections.abc import AsyncGenerator
+from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import MetaData
+from sqlalchemy import DateTime, MetaData, Uuid
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
@@ -26,7 +27,8 @@ async_session_factory: async_sessionmaker[AsyncSession] = async_sessionmaker(
 class Base(DeclarativeBase):
     metadata = MetaData(naming_convention=_naming_convention)
     type_annotation_map = {
-        UUID: UUID,
+        UUID: Uuid(as_uuid=True),
+        datetime: DateTime(timezone=True),
     }
 
 
