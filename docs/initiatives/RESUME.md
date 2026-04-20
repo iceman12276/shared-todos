@@ -7,7 +7,7 @@
 
 ## One-line summary for the agent that resumes
 
-> Read this file in full, then read `docs/initiatives/2026-04-19-shared-todos-app.md` (the approved memo). Phase 4 complete. Phase 6 is IN PROGRESS with an ADR committed locally on `feat/pr1-foundation` (commit `895bd1b`, not yet pushed) and `.github/workflows/ci.yml` authored in the worktree but uncommitted. Re-spawn the team, let engineering-lead commit the CI YAML + push both with their now-active Bash tool, then kick backend-dev into the FastAPI skeleton.
+> Read this file in full, then read `docs/initiatives/2026-04-19-shared-todos-app.md` (the approved memo). Phase 4 complete. Phase 6 is IN PROGRESS: `feat/pr1-foundation` is pushed to origin (commits `895bd1b` ADR + `c73324e` CI), 2 commits ahead of master. First CI run has been triggered on the branch push. No PR yet. After respawn engineering-lead has Bash natively — first action is to verify Bash works, then brief backend-dev to add the FastAPI skeleton on top of these two commits. Once backend-dev is done, open PR-1.
 
 ---
 
@@ -20,7 +20,7 @@
 | Main working tree | `/home/isaac/Desktop/dev/shared-todos` |
 | PR-1 worktree | `/home/isaac/Desktop/dev/shared-todos-pr1` (branch `feat/pr1-foundation`) |
 | master HEAD (pushed) | `4ab5612` — Add RESUME.md |
-| feat/pr1-foundation HEAD (local-only) | `895bd1b` — Add ADR: WebSocket + Postgres NOTIFY for realtime |
+| feat/pr1-foundation HEAD (pushed to origin) | `c73324e` — Add CI: backend + test-quality + security gates |
 | Initiative memo | `docs/initiatives/2026-04-19-shared-todos-app.md` |
 | Status | APPROVED — Phase 4 complete, Phase 6 in progress |
 
@@ -74,20 +74,20 @@
 - `c74ae29` Add PRD-2
 - `71aaf67` Initiative memo
 
-### LOCAL-only commit on `feat/pr1-foundation` (NOT pushed)
+### Pushed to `origin/feat/pr1-foundation` (2 commits ahead of master)
 - `895bd1b` Add ADR: WebSocket + Postgres NOTIFY for realtime
   - Path: `docs/architecture/realtime-transport-decision.md` (171 lines)
-  - Authored by engineering-lead (body includes Why/Considered/Trade-offs for WS+LISTEN/NOTIFY choice vs SSE/short-poll/Redis-broker/managed-realtime/CDC/etc)
-  - Committed by orchestrator on eng-lead's behalf (Option B — eng-lead didn't have Bash yet)
-
-### Uncommitted in worktree `/home/isaac/Desktop/dev/shared-todos-pr1/`
-- `.github/workflows/ci.yml` — written to disk by engineering-lead, not yet committed
-  - Per engineering-lead's task plan: backend lane (ruff, mypy --strict, pytest with real Postgres + mailhog services, semgrep, gitleaks) + test-quality gate. Frontend lane deferred until frontend-dev starts.
-  - engineering-lead was about to send COMMIT_REQUEST 2/2 when the Bash gap was discovered.
+  - Authored by engineering-lead; committed via orchestrator (Option B — eng-lead didn't have Bash yet)
+- `c73324e` Add CI: backend + test-quality + security gates
+  - Path: `.github/workflows/ci.yml` (181 lines)
+  - 3 parallel jobs: backend (ruff/mypy/pytest with real Postgres + mailhog), test-quality (grep-based skip-discipline), security-gate (Semgrep p/default+p/python+p/owasp-top-ten+p/secrets, Gitleaks)
+  - Frontend lane deferred until frontend-dev starts
+  - Authored by engineering-lead; committed via orchestrator (Option B)
 
 ### Remote branches
-- `origin/master` @ 4ab5612 (tracks local master)
-- No `origin/feat/pr1-foundation` yet — will be created on first push.
+- `origin/master` @ 2384458 (RESUME.md v2 update — will advance to v3 when this file is re-committed)
+- `origin/feat/pr1-foundation` @ c73324e (2 commits ahead of master; first CI run triggered on push)
+- No PR open yet — next PR-1 will be opened by engineering-lead or backend-dev once the FastAPI skeleton lands on top of these two commits
 
 ---
 
@@ -150,7 +150,7 @@ Both were running before the pause:
 
 3. **Re-spawn 5 teammates** (skip PM + UX; their work is done):
    - `planning-lead` — "Respawned after 2nd restart. Phase 4 complete; stand by."
-   - `engineering-lead` — "Respawned after 2nd restart. You NOW HAVE `Bash` in your tool surface. Phase 6 in progress: ADR `895bd1b` committed on local `feat/pr1-foundation`, `.github/workflows/ci.yml` authored but uncommitted at `/home/isaac/Desktop/dev/shared-todos-pr1/.github/workflows/ci.yml`. Your first action: run commit-discipline, then `git add .github/workflows/ci.yml && git commit -m '<body>' && git push -u origin feat/pr1-foundation` — this push creates the remote branch with both commits. Then brief backend-dev to start the FastAPI skeleton."
+   - `engineering-lead` — "Respawned after 2nd restart. You NOW HAVE `Bash` in your tool surface. Phase 6 in progress: `feat/pr1-foundation` pushed to origin with two commits ahead of master (`895bd1b` ADR + `c73324e` CI). Your first action: verify Bash works via `git status -sb` smoke test. If Bash confirmed, brief backend-dev to add the FastAPI skeleton ON TOP of these two commits (backend/ package layout, pyproject.toml, /health endpoint with integration test that boots the real app). Once backend-dev's work is on the branch with CI green, open PR-1 via `gh pr create`."
    - `validation-lead` — "Respawned. Stand by for per-PR validation dispatch from the polling loop."
    - `meta-auditor` — "Respawned. Read your MEMORY.md for prior findings. Sweep counter was at #13; next is #14. Active sweep mode: orchestrator will restart the 2-min cron."
    - `backend-dev` — "Respawned. Worktree exists at /home/isaac/Desktop/dev/shared-todos-pr1. Branch `feat/pr1-foundation` local. Python 3.12 confirmed. Stand by for engineering-lead's kickoff brief once they push the ADR + CI."
