@@ -7,7 +7,7 @@
 
 ## One-line summary for the agent that resumes
 
-> Read this file in full, then read `docs/initiatives/2026-04-19-shared-todos-app.md` (the approved memo). Phase 4 complete. Phase 6 is IN PROGRESS: `feat/pr1-foundation` is pushed to origin (commits `895bd1b` ADR + `c73324e` CI), 2 commits ahead of master. First CI run has been triggered on the branch push. No PR yet. After respawn engineering-lead has Bash natively — first action is to verify Bash works, then brief backend-dev to add the FastAPI skeleton on top of these two commits. Once backend-dev is done, open PR-1.
+> Read this file in full, then read `docs/initiatives/2026-04-19-shared-todos-app.md` (the approved memo) + `CLAUDE.md` at repo root (architecture + commands). **Phase 4 + PR-1 of Phase 6 are MERGED** (merge commit `f1f1498` at 2026-04-20T06:16Z). Initiative is mid-Phase 6 with PR-2 (auth + user model + first migration) as the next engineering task. Validation-lead has pre-routed PR-2 scope: full pr-review-toolkit + YES security-reviewer deep OWASP + YES qa-engineer for first runtime exercise. Polling loop re-engages when engineering-lead opens PR-2.
 
 ---
 
