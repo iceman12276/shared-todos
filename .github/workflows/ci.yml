@@ -171,9 +171,14 @@ jobs:
         run: pip install semgrep
 
       - name: Semgrep scan (SAST + supply-chain)
-        env:
-          SEMGREP_RULES: "p/default p/python p/owasp-top-ten p/secrets"
-        run: semgrep ci --error
+        run: >
+          semgrep scan
+          --error
+          --config p/default
+          --config p/python
+          --config p/owasp-top-ten
+          --config p/secrets
+          --metrics off
 
       - name: Gitleaks (secret scan)
         uses: gitleaks/gitleaks-action@v2
