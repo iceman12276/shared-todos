@@ -4,16 +4,22 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from datetime import datetime, timedelta, timezone
+
 from app.auth.dependencies import require_auth
+from app.auth.email import send_password_reset_email
 from app.auth.password import hash_password, verify_password
 from app.auth.rate_limiter import check_login_rate_limit, record_failed_login, reset_failed_logins
-from app.auth.schemas import LoginRequest, RegisterRequest, UserOut
+from app.auth.schemas import LoginRequest, PasswordResetCompleteBody, PasswordResetRequestBody, RegisterRequest, UserOut
 from app.auth.session import (
     create_session,
+    invalidate_all_user_sessions,
     invalidate_session,
 )
+from app.auth.tokens import generate_reset_token, hash_token, verify_token_hash
 from app.config import settings
 from app.db.base import get_session
+from app.models.password_reset_token import PasswordResetToken
 from app.models.user import User
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
@@ -116,3 +122,92 @@ async def logout(
 @router.get("/session")
 async def get_session_info(current_user: User = Depends(require_auth)) -> dict:  # type: ignore[type-arg]
     return {"user": _user_out(current_user)}
+
+
+_RESET_TTL_HOURS = 1
+
+
+@router.post("/password-reset/request")
+async def password_reset_request(
+    body: PasswordResetRequestBody,
+    db: AsyncSession = Depends(get_session),
+) -> dict:  # type: ignore[type-arg]
+    """Request a password reset link. Always returns 200 — anti-enumeration (US-106)."""
+    result = await db.execute(select(User).where(User.email == body.email))
+    user = result.scalar_one_or_none()
+
+    if user is not None:
+        if user.password_hash is None:
+            # Google-only account: no reset email, but still opaque response
+            pass
+        else:
+            token = generate_reset_token()
+            prt = PasswordResetToken(
+                user_id=user.id,
+                token_hash=hash_token(token),
+                expires_at=datetime.now(timezone.utc) + timedelta(hours=_RESET_TTL_HOURS),
+            )
+            db.add(prt)
+            await db.commit()
+            try:
+                await send_password_reset_email(body.email, token)
+            except Exception:
+                pass  # best-effort: don't leak send failures
+
+    return {"message": "If an account exists for this email, a reset link has been sent."}
+
+
+@router.get("/password-reset/validate")
+async def password_reset_validate(
+    token: str,
+    db: AsyncSession = Depends(get_session),
+) -> dict:  # type: ignore[type-arg]
+    """Validate a reset token without consuming it (US-107 — used on page load)."""
+    token_hash = hash_token(token)
+    now = datetime.now(timezone.utc)
+    result = await db.execute(
+        select(PasswordResetToken).where(
+            PasswordResetToken.token_hash == token_hash,
+            PasswordResetToken.expires_at > now,
+            PasswordResetToken.used_at.is_(None),
+        )
+    )
+    prt = result.scalar_one_or_none()
+    if prt is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid")
+    return {"valid": True}
+
+
+@router.post("/password-reset/complete")
+async def password_reset_complete(
+    body: PasswordResetCompleteBody,
+    db: AsyncSession = Depends(get_session),
+) -> dict:  # type: ignore[type-arg]
+    """Complete a password reset. Invalidates ALL existing sessions (US-107)."""
+    token_hash = hash_token(body.token)
+    now = datetime.now(timezone.utc)
+    result = await db.execute(
+        select(PasswordResetToken).where(
+            PasswordResetToken.token_hash == token_hash,
+            PasswordResetToken.expires_at > now,
+            PasswordResetToken.used_at.is_(None),
+        )
+    )
+    prt = result.scalar_one_or_none()
+    if prt is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_or_used")
+
+    # Mark token as used (single-use)
+    prt.used_at = now
+    await db.commit()
+
+    # Update password
+    user_result = await db.execute(select(User).where(User.id == prt.user_id))
+    user = user_result.scalar_one()
+    user.password_hash = hash_password(body.new_password)
+    await db.commit()
+
+    # Invalidate ALL sessions for this user (US-107 hard requirement)
+    await invalidate_all_user_sessions(db, user.id)
+
+    return {"message": "Password updated. All sessions have been invalidated."}
