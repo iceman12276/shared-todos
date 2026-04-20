@@ -12,8 +12,14 @@ class Settings(BaseSettings):
     @field_validator("database_url")
     @classmethod
     def normalize_db_dialect(cls, v: str) -> str:
-        # CI sets postgresql+psycopg:// (psycopg3 sync); async engine needs psycopg_async.
-        return v.replace("postgresql+psycopg://", "postgresql+psycopg_async://")
+        if v.startswith("postgresql+psycopg://"):
+            return v.replace("postgresql+psycopg://", "postgresql+psycopg_async://", 1)
+        if v.startswith("postgresql+psycopg_async://"):
+            return v
+        raise ValueError(
+            "DATABASE_URL must use postgresql+psycopg:// or postgresql+psycopg_async://; "
+            f"got: {v!r}"
+        )
 
 
 settings = Settings()

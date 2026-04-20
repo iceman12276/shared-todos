@@ -33,5 +33,11 @@ class Base(DeclarativeBase):
 
 
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
+    """FastAPI dependency that yields one AsyncSession per request.
+
+    Caller MUST explicitly ``await session.commit()`` to persist changes.
+    Uncaught exceptions trigger rollback automatically via the async context manager.
+    The framework manages the lifecycle; do not close the session manually.
+    """
     async with async_session_factory() as session:
         yield session
