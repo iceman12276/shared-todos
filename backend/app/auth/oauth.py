@@ -1,18 +1,22 @@
 """Google OAuth 2.0 Authorization Code + PKCE flow (US-103).
 
-State parameter signed with itsdangerous to prevent CSRF — no server-side
-session store needed for the OAuth handshake itself.
+State parameter is signed with itsdangerous AND the nonce is bound to the
+browser session via a short-lived httpOnly cookie (oauth_state_nonce).
+At callback, the nonce extracted from the signed state must match the cookie
+via secrets.compare_digest — this prevents CSRF attacks where an attacker
+initiates OAuth and sends the callback URL to a victim.
 
 The httpx client is injectable as a FastAPI dependency so tests can provide
 a pre-configured mock transport without needing global HTTP interception.
 """
 import base64
 import json
+import secrets
 from collections.abc import AsyncGenerator
 from typing import Any
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from itsdangerous import BadSignature, URLSafeSerializer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -35,6 +39,8 @@ _GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"  # noqa: S105
 _GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v3/userinfo"
 
 _COOKIE_NAME = "session"
+_NONCE_COOKIE = "oauth_state_nonce"
+_NONCE_TTL = 600  # 10 minutes — enough to complete the OAuth dance
 
 
 def _signer() -> URLSafeSerializer:
@@ -45,12 +51,13 @@ def _make_state(nonce: str) -> str:
     return _signer().dumps(nonce)
 
 
-def _verify_state(state: str) -> bool:
+def _extract_nonce(state: str) -> str | None:
+    """Return the nonce embedded in a valid signed state, or None if invalid."""
     try:
-        _signer().loads(state)
-        return True
+        nonce: str = _signer().loads(state)
+        return nonce
     except BadSignature:
-        return False
+        return None
 
 
 def _build_auth_url(state: str) -> str:
@@ -94,19 +101,33 @@ def _set_session_cookie(response: Response, token: str) -> None:
 
 @router.get("/google")
 async def oauth_google_initiate(response: Response) -> Response:
-    """Redirect to Google's OAuth consent screen."""
-    import secrets
+    """Redirect to Google's OAuth consent screen.
+
+    The nonce is stored in a short-lived httpOnly cookie so that the callback
+    can verify the state is bound to THIS browser — not replayed from another
+    session (OAuth CSRF, item 4).
+    """
     nonce = secrets.token_urlsafe(16)
     state = _make_state(nonce)
     auth_url = _build_auth_url(state)
-    return Response(
+    resp = Response(
         status_code=status.HTTP_302_FOUND,
         headers={"location": auth_url},
     )
+    resp.set_cookie(
+        key=_NONCE_COOKIE,
+        value=nonce,
+        httponly=True,
+        samesite="lax",
+        max_age=_NONCE_TTL,
+        secure=settings.cookie_secure,
+    )
+    return resp
 
 
 @router.get("/google/callback")
 async def oauth_google_callback(
+    request: Request,
     code: str | None = None,
     state: str | None = None,
     error: str | None = None,
@@ -120,7 +141,16 @@ async def oauth_google_callback(
             headers={"location": f"{settings.frontend_url}/register?error=oauth_cancelled"},
         )
 
-    if state is None or not _verify_state(state):
+    if state is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid state")
+
+    nonce = _extract_nonce(state)
+    if nonce is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid state")
+
+    # Verify the nonce is bound to this browser session (OAuth CSRF prevention).
+    cookie_nonce = request.cookies.get(_NONCE_COOKIE, "")
+    if not cookie_nonce or not secrets.compare_digest(nonce, cookie_nonce):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid state")
 
     # Exchange code for tokens

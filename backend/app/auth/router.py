@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import require_auth
 from app.auth.email import send_password_reset_email
-from app.auth.password import hash_password, verify_password
+from app.auth.password import hash_password, make_dummy_hash, verify_password
 from app.auth.rate_limiter import check_login_rate_limit, record_failed_login, reset_failed_logins
 from app.auth.schemas import (
     LoginRequest,
@@ -69,8 +69,10 @@ async def register(
     existing = result.scalar_one_or_none()
 
     if existing is not None:
-        # Anti-enumeration: return same 201 structure with no user data (US-101).
-        # BSD says: "if this email is available, your account has been created"
+        # Anti-enumeration: same 201 body AND same Set-Cookie headers as the
+        # success branch (US-101). Without matching cookies an attacker can
+        # distinguish "email exists" from "email free" via response headers.
+        _set_auth_cookies(response, secrets.token_urlsafe(32))
         msg = "If this email is available, your account has been created."
         return {"user": None, "message": msg}
 
@@ -101,10 +103,11 @@ async def login(
     result = await db.execute(select(User).where(User.email == body.email))
     user = result.scalar_one_or_none()
 
-    # Anti-enumeration: check password even if user not found (constant-time path)
+    # Anti-enumeration: verify against a precomputed dummy hash when user not
+    # found — same argon2 verify() operation as the wrong-password branch,
+    # guaranteeing timing equivalence (hash() and verify() have different paths).
     if user is None or user.password_hash is None:
-        # Still do a dummy hash to avoid timing side-channel on missing user
-        hash_password("dummy-timing-equalization")
+        verify_password(body.password, make_dummy_hash())
         record_failed_login(request)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
