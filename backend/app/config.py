@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     smtp_port: int = Field(default=1025, ge=1, le=65535)
 
     # Session signing — must be set in production; dev default is only for local/CI
-    secret_key: str = "dev-secret-key-change-in-production"
+    secret_key: str = "dev-secret-key-change-in-production"  # noqa: S105
     session_ttl_days: int = Field(default=7, ge=1, le=365)
 
     # Rate limiting: login attempts per IP per window

@@ -1,6 +1,4 @@
 """Unit tests for session service — uses real DB via db_session fixture."""
-from datetime import datetime, timedelta, timezone
-from uuid import uuid4
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession

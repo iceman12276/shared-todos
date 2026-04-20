@@ -1,6 +1,7 @@
 """Email sending via SMTP (mailhog in dev, real SMTP in prod)."""
-import aiosmtplib
 from email.message import EmailMessage
+
+import aiosmtplib
 
 from app.config import settings
 

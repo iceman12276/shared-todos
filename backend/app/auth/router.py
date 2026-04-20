@@ -1,22 +1,27 @@
-from datetime import timedelta
+import contextlib
+import secrets
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from datetime import datetime, timedelta, timezone
-
 from app.auth.dependencies import require_auth
 from app.auth.email import send_password_reset_email
 from app.auth.password import hash_password, verify_password
 from app.auth.rate_limiter import check_login_rate_limit, record_failed_login, reset_failed_logins
-from app.auth.schemas import LoginRequest, PasswordResetCompleteBody, PasswordResetRequestBody, RegisterRequest, UserOut
+from app.auth.schemas import (
+    LoginRequest,
+    PasswordResetCompleteBody,
+    PasswordResetRequestBody,
+    RegisterRequest,
+)
 from app.auth.session import (
     create_session,
     invalidate_all_user_sessions,
     invalidate_session,
 )
-from app.auth.tokens import generate_reset_token, hash_token, verify_token_hash
+from app.auth.tokens import generate_reset_token, hash_token
 from app.config import settings
 from app.db.base import get_session
 from app.models.password_reset_token import PasswordResetToken
@@ -26,13 +31,24 @@ router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
 _GENERIC_AUTH_ERROR = "Invalid credentials"
 _COOKIE_NAME = "session"
+_CSRF_COOKIE = "csrf_token"
 
 
-def _set_session_cookie(response: Response, token: str) -> None:
+def _set_auth_cookies(response: Response, session_token: str) -> None:
+    """Set httpOnly session cookie + non-httpOnly CSRF double-submit cookie."""
     response.set_cookie(
         key=_COOKIE_NAME,
-        value=token,
+        value=session_token,
         httponly=True,
+        samesite="lax",
+        max_age=settings.session_ttl_days * 86400,
+        secure=settings.cookie_secure,
+    )
+    csrf_token = secrets.token_urlsafe(32)
+    response.set_cookie(
+        key=_CSRF_COOKIE,
+        value=csrf_token,
+        httponly=False,  # nosemgrep: fastapi-cookie-httponly-false  # noqa: E501
         samesite="lax",
         max_age=settings.session_ttl_days * 86400,
         secure=settings.cookie_secure,
@@ -47,7 +63,7 @@ def _user_out(user: User) -> dict:  # type: ignore[type-arg]
 async def register(
     body: RegisterRequest,
     response: Response,
-    db: AsyncSession = Depends(get_session),
+    db: AsyncSession = Depends(get_session),  # noqa: B008
 ) -> dict:  # type: ignore[type-arg]
     result = await db.execute(select(User).where(User.email == body.email))
     existing = result.scalar_one_or_none()
@@ -55,7 +71,8 @@ async def register(
     if existing is not None:
         # Anti-enumeration: return same 201 structure with no user data (US-101).
         # BSD says: "if this email is available, your account has been created"
-        return {"user": None, "message": "If this email is available, your account has been created."}
+        msg = "If this email is available, your account has been created."
+        return {"user": None, "message": msg}
 
     display_name = body.email.split("@")[0]
     user = User(
@@ -68,7 +85,7 @@ async def register(
     await db.refresh(user)
 
     token = await create_session(db, user.id, ttl_days=settings.session_ttl_days)
-    _set_session_cookie(response, token)
+    _set_auth_cookies(response, token)
     return {"user": _user_out(user)}
 
 
@@ -77,7 +94,7 @@ async def login(
     body: LoginRequest,
     request: Request,
     response: Response,
-    db: AsyncSession = Depends(get_session),
+    db: AsyncSession = Depends(get_session),  # noqa: B008
 ) -> dict:  # type: ignore[type-arg]
     check_login_rate_limit(request)
 
@@ -103,7 +120,7 @@ async def login(
 
     reset_failed_logins(request)
     token = await create_session(db, user.id, ttl_days=settings.session_ttl_days)
-    _set_session_cookie(response, token)
+    _set_auth_cookies(response, token)
     return {"user": _user_out(user)}
 
 
@@ -111,7 +128,7 @@ async def login(
 async def logout(
     request: Request,
     response: Response,
-    db: AsyncSession = Depends(get_session),
+    db: AsyncSession = Depends(get_session),  # noqa: B008
 ) -> None:
     token = request.cookies.get(_COOKIE_NAME)
     if token:
@@ -120,7 +137,7 @@ async def logout(
 
 
 @router.get("/session")
-async def get_session_info(current_user: User = Depends(require_auth)) -> dict:  # type: ignore[type-arg]
+async def get_session_info(current_user: User = Depends(require_auth)) -> dict:  # type: ignore[type-arg]  # noqa: B008
     return {"user": _user_out(current_user)}
 
 
@@ -130,7 +147,7 @@ _RESET_TTL_HOURS = 1
 @router.post("/password-reset/request")
 async def password_reset_request(
     body: PasswordResetRequestBody,
-    db: AsyncSession = Depends(get_session),
+    db: AsyncSession = Depends(get_session),  # noqa: B008
 ) -> dict:  # type: ignore[type-arg]
     """Request a password reset link. Always returns 200 — anti-enumeration (US-106)."""
     result = await db.execute(select(User).where(User.email == body.email))
@@ -145,14 +162,12 @@ async def password_reset_request(
             prt = PasswordResetToken(
                 user_id=user.id,
                 token_hash=hash_token(token),
-                expires_at=datetime.now(timezone.utc) + timedelta(hours=_RESET_TTL_HOURS),
+                expires_at=datetime.now(UTC) + timedelta(hours=_RESET_TTL_HOURS),
             )
             db.add(prt)
             await db.commit()
-            try:
+            with contextlib.suppress(Exception):  # best-effort: don't leak send failures
                 await send_password_reset_email(body.email, token)
-            except Exception:
-                pass  # best-effort: don't leak send failures
 
     return {"message": "If an account exists for this email, a reset link has been sent."}
 
@@ -160,11 +175,11 @@ async def password_reset_request(
 @router.get("/password-reset/validate")
 async def password_reset_validate(
     token: str,
-    db: AsyncSession = Depends(get_session),
+    db: AsyncSession = Depends(get_session),  # noqa: B008
 ) -> dict:  # type: ignore[type-arg]
     """Validate a reset token without consuming it (US-107 — used on page load)."""
     token_hash = hash_token(token)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     result = await db.execute(
         select(PasswordResetToken).where(
             PasswordResetToken.token_hash == token_hash,
@@ -181,11 +196,11 @@ async def password_reset_validate(
 @router.post("/password-reset/complete")
 async def password_reset_complete(
     body: PasswordResetCompleteBody,
-    db: AsyncSession = Depends(get_session),
+    db: AsyncSession = Depends(get_session),  # noqa: B008
 ) -> dict:  # type: ignore[type-arg]
     """Complete a password reset. Invalidates ALL existing sessions (US-107)."""
     token_hash = hash_token(body.token)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     result = await db.execute(
         select(PasswordResetToken).where(
             PasswordResetToken.token_hash == token_hash,

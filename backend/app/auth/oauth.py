@@ -12,7 +12,7 @@ from collections.abc import AsyncGenerator
 from typing import Any
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from itsdangerous import BadSignature, URLSafeSerializer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -31,7 +31,7 @@ async def get_http_client() -> AsyncGenerator[httpx.AsyncClient, None]:
         yield client
 
 _GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
-_GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
+_GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"  # noqa: S105
 _GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v3/userinfo"
 
 _COOKIE_NAME = "session"
@@ -54,7 +54,6 @@ def _verify_state(state: str) -> bool:
 
 
 def _build_auth_url(state: str) -> str:
-    import secrets
     from urllib.parse import urlencode
 
     params = {
@@ -78,7 +77,8 @@ def _decode_id_token_payload(id_token: str) -> dict[str, Any]:
     if len(parts) < 2:
         raise ValueError("Invalid id_token format")
     payload_b64 = parts[1] + "=="  # pad
-    return json.loads(base64.urlsafe_b64decode(payload_b64))
+    result: dict[str, Any] = json.loads(base64.urlsafe_b64decode(payload_b64))
+    return result
 
 
 def _set_session_cookie(response: Response, token: str) -> None:
@@ -110,8 +110,8 @@ async def oauth_google_callback(
     code: str | None = None,
     state: str | None = None,
     error: str | None = None,
-    db: AsyncSession = Depends(get_session),
-    http: httpx.AsyncClient = Depends(get_http_client),
+    db: AsyncSession = Depends(get_session),  # noqa: B008
+    http: httpx.AsyncClient = Depends(get_http_client),  # noqa: B008
 ) -> Response:
     """Handle Google's callback, exchange code for tokens, create/link account."""
     if error or code is None:

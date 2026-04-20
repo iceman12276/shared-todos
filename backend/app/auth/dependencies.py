@@ -8,7 +8,7 @@ from app.models.user import User
 
 async def require_auth(
     session: str | None = Cookie(default=None),
-    db: AsyncSession = Depends(get_session),
+    db: AsyncSession = Depends(get_session),  # noqa: B008
 ) -> User:
     """FastAPI dependency that returns the current authenticated User.
 

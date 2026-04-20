@@ -7,7 +7,7 @@ This is an in-memory implementation suitable for v1 single-replica. For
 multi-replica deployments, replace the _store dict with a Redis backend.
 """
 from collections import defaultdict
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from threading import Lock
 
 from fastapi import HTTPException, Request, status
@@ -31,7 +31,7 @@ def _client_ip(request: Request) -> str:
 def record_failed_login(request: Request) -> None:
     """Record a failed login attempt for the request's IP."""
     ip = _client_ip(request)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     window = timedelta(seconds=settings.rate_limit_login_window_seconds)
     with _lock:
         attempts = _store[ip]
@@ -43,7 +43,7 @@ def record_failed_login(request: Request) -> None:
 def check_login_rate_limit(request: Request) -> None:
     """Raise 429 if IP has exceeded the failed login threshold."""
     ip = _client_ip(request)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     window = timedelta(seconds=settings.rate_limit_login_window_seconds)
     with _lock:
         attempts = _store.get(ip, [])

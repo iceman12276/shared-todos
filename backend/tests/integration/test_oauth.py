@@ -9,7 +9,7 @@ from urllib.parse import parse_qs, urlparse
 
 import httpx
 import pytest
-from httpx import ASGITransport, AsyncClient, Response
+from httpx import ASGITransport, AsyncClient
 
 from app.auth.oauth import get_http_client
 from app.main import app
@@ -104,7 +104,7 @@ async def test_oauth_callback_creates_new_user_and_session(override_http_client:
 
 
 @pytest.mark.asyncio
-async def test_oauth_callback_links_existing_email_password_account(override_http_client: None) -> None:
+async def test_oauth_callback_links_existing_account(override_http_client: None) -> None:
     """If email+password account already exists, OAuth links to it — no duplicate."""
     async with AsyncClient(transport=ASGITransport(app=app), base_url=BASE) as c:
         # Register with email+password first
@@ -126,9 +126,10 @@ async def test_oauth_callback_links_existing_email_password_account(override_htt
     assert "session" in r.cookies
 
     # Verify no duplicate user was created
+    from sqlalchemy import func, select
+
     from app.db.base import async_session_factory
     from app.models.user import User
-    from sqlalchemy import func, select
 
     async with async_session_factory() as db:
         result = await db.execute(

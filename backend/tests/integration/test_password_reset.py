@@ -1,4 +1,6 @@
 """Password reset flow integration tests (US-106, US-107)."""
+from datetime import UTC
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 
@@ -51,18 +53,20 @@ async def test_reset_request_opaque_for_nonexistent_email(client: AsyncClient) -
 @pytest.mark.asyncio
 async def test_reset_validate_valid_token(client: AsyncClient) -> None:
     """A freshly-issued token validates successfully."""
+    from datetime import datetime, timedelta
+
+    from sqlalchemy import select
+
     from app.auth.tokens import generate_reset_token, hash_token
-    from datetime import datetime, timedelta, timezone
     from app.db.base import async_session_factory
     from app.models.password_reset_token import PasswordResetToken
     from app.models.user import User
-    from sqlalchemy import select
 
     async with async_session_factory() as db:
         result = await db.execute(select(User).where(User.email == "validatetoken@example.com"))
         user = result.scalar_one_or_none()
         if user is None:
-            user = User(email="validatetoken@example.com", display_name="v", password_hash="x")
+            user = User(email="validatetoken@example.com", display_name="v", password_hash="x")  # noqa: S106
             db.add(user)
             await db.commit()
             await db.refresh(user)
@@ -70,7 +74,7 @@ async def test_reset_validate_valid_token(client: AsyncClient) -> None:
         prt = PasswordResetToken(
             user_id=user.id,
             token_hash=hash_token(token),
-            expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+            expires_at=datetime.now(UTC) + timedelta(hours=1),
         )
         db.add(prt)
         await db.commit()
@@ -91,12 +95,14 @@ async def test_reset_validate_invalid_token(client: AsyncClient) -> None:
 @pytest.mark.asyncio
 async def test_reset_complete_success_invalidates_all_sessions() -> None:
     """Completing a reset invalidates all existing sessions (US-107)."""
+    from datetime import datetime, timedelta
+
+    from sqlalchemy import select
+
     from app.auth.tokens import generate_reset_token, hash_token
-    from datetime import datetime, timedelta, timezone
     from app.db.base import async_session_factory
     from app.models.password_reset_token import PasswordResetToken
     from app.models.user import User
-    from sqlalchemy import select
 
     email = "resetcomplete@example.com"
     async with AsyncClient(transport=ASGITransport(app=app), base_url=BASE) as c:
@@ -115,7 +121,7 @@ async def test_reset_complete_success_invalidates_all_sessions() -> None:
             prt = PasswordResetToken(
                 user_id=user.id,
                 token_hash=hash_token(token),
-                expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+                expires_at=datetime.now(UTC) + timedelta(hours=1),
             )
             db.add(prt)
             await db.commit()
@@ -136,12 +142,14 @@ async def test_reset_complete_success_invalidates_all_sessions() -> None:
 @pytest.mark.asyncio
 async def test_reset_complete_used_token_rejected(client: AsyncClient) -> None:
     """Re-using a reset token returns an error."""
+    from datetime import datetime, timedelta
+
+    from sqlalchemy import select
+
     from app.auth.tokens import generate_reset_token, hash_token
-    from datetime import datetime, timedelta, timezone
     from app.db.base import async_session_factory
     from app.models.password_reset_token import PasswordResetToken
     from app.models.user import User
-    from sqlalchemy import select
 
     email = "tokenreuse@example.com"
     async with client as c:
@@ -156,7 +164,7 @@ async def test_reset_complete_used_token_rejected(client: AsyncClient) -> None:
             prt = PasswordResetToken(
                 user_id=user.id,
                 token_hash=hash_token(token),
-                expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+                expires_at=datetime.now(UTC) + timedelta(hours=1),
             )
             db.add(prt)
             await db.commit()

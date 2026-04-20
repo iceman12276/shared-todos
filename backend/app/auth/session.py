@@ -1,7 +1,7 @@
-from datetime import datetime, timedelta, timezone
+import secrets
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
-import secrets
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,7 +11,7 @@ from app.models.user import User
 
 async def create_session(db: AsyncSession, user_id: UUID, ttl_days: int) -> str:
     token = secrets.token_urlsafe(32)
-    expires_at = datetime.now(timezone.utc) + timedelta(days=ttl_days)
+    expires_at = datetime.now(UTC) + timedelta(days=ttl_days)
     session = Session(user_id=user_id, token=token, expires_at=expires_at)
     db.add(session)
     await db.commit()
@@ -19,7 +19,7 @@ async def create_session(db: AsyncSession, user_id: UUID, ttl_days: int) -> str:
 
 
 async def get_session_user(db: AsyncSession, token: str) -> User | None:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     result = await db.execute(
         select(User)
         .join(Session, Session.user_id == User.id)
