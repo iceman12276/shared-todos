@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     # Frontend base URL for post-OAuth redirect
     frontend_url: str = "http://localhost:3000"
 
+    # Set True in production (HTTPS). Dev/CI default is False (HTTP only).
+    cookie_secure: bool = False
+
     @field_validator("database_url")
     @classmethod
     def normalize_db_dialect(cls, v: str) -> str:
