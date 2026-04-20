@@ -76,6 +76,31 @@ async def test_register_duplicate_email_no_enumeration(client: AsyncClient) -> N
 
 
 @pytest.mark.asyncio
+async def test_register_duplicate_email_cookies_match_success_branch(
+    client: AsyncClient,
+) -> None:
+    """Duplicate-email register must set cookies identical to a fresh register.
+
+    Without this, an attacker can distinguish 'email exists' from 'email free'
+    by checking for Set-Cookie: session in the response headers (item 2).
+    """
+    async with client as c:
+        r1 = await c.post(
+            "/api/v1/auth/register",
+            json={"email": "sidechannel@example.com", "password": "correcthorsebattery1"},
+        )
+        r2 = await c.post(
+            "/api/v1/auth/register",
+            json={"email": "sidechannel@example.com", "password": "anotherpassword12"},
+        )
+    # Both responses must set session and csrf_token cookies
+    assert "session" in r1.cookies
+    assert "csrf_token" in r1.cookies
+    assert "session" in r2.cookies, "duplicate-email branch must also set session cookie"
+    assert "csrf_token" in r2.cookies, "duplicate-email branch must also set csrf_token cookie"
+
+
+@pytest.mark.asyncio
 async def test_login_success(client: AsyncClient) -> None:
     async with client as c:
         await c.post(
@@ -130,8 +155,9 @@ async def test_logout_invalidates_session(client: AsyncClient) -> None:
             "/api/v1/auth/login",
             json={"email": "logout@example.com", "password": "correcthorsebattery1"},
         )
-        # Logout
-        logout_r = await c.post("/api/v1/auth/logout")
+        # Logout — must include CSRF header (logout is not exempt)
+        csrf = login_r.cookies.get("csrf_token", "")
+        logout_r = await c.post("/api/v1/auth/logout", headers={"X-CSRF-Token": csrf})
         assert logout_r.status_code == 204
         # Old cookie should now be unauthorized
         old_cookie = login_r.cookies["session"]

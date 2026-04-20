@@ -137,3 +137,29 @@ async def test_oauth_callback_links_existing_account(override_http_client: None)
         )
         count = result.scalar()
     assert count == 1
+
+
+@pytest.mark.asyncio
+async def test_oauth_callback_missing_state_cookie_rejected(
+    override_http_client: None,
+) -> None:
+    """Callback without the oauth_state_nonce cookie is rejected — item 4.
+
+    An attacker can initiate OAuth and send the URL to a victim. Without
+    session-binding, the callback would succeed even in the victim's browser.
+    The nonce cookie prevents this: it must be present and match the state.
+    """
+    async with AsyncClient(transport=ASGITransport(app=app), base_url=BASE) as c:
+        # Get a valid signed state from the initiate endpoint
+        init_r = await c.get("/api/v1/auth/oauth/google", follow_redirects=False)
+        state = parse_qs(urlparse(init_r.headers["location"]).query).get("state", [""])[0]
+
+        # Simulate attacker sending URL to victim: clear the nonce cookie
+        c.cookies.delete("oauth_state_nonce")
+
+        r = await c.get(
+            "/api/v1/auth/oauth/google/callback",
+            params={"code": "fake-code", "state": state},
+            follow_redirects=False,
+        )
+    assert r.status_code == 400

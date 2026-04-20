@@ -4,9 +4,9 @@ This test was recommended in the PR-1 validation report as a natural addition
 alongside the first real migration.
 """
 import pytest
-from alembic.config import Config
 
 from alembic import command
+from alembic.config import Config
 
 
 @pytest.fixture

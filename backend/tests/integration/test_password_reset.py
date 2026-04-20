@@ -28,13 +28,15 @@ async def _register_and_login(client: AsyncClient, email: str) -> str:
 async def test_reset_request_opaque_for_registered_email() -> None:
     """Reset request always returns 200 regardless of email existence."""
     async with AsyncClient(transport=ASGITransport(app=app), base_url=BASE) as c:
-        await c.post(
+        reg_r = await c.post(
             "/api/v1/auth/register",
             json={"email": "reset@example.com", "password": "correcthorsebattery1"},
         )
+        csrf = reg_r.cookies.get("csrf_token", "")
         r = await c.post(
             "/api/v1/auth/password-reset/request",
             json={"email": "reset@example.com"},
+            headers={"X-CSRF-Token": csrf},
         )
     assert r.status_code == 200
 
@@ -112,6 +114,7 @@ async def test_reset_complete_success_invalidates_all_sessions() -> None:
             json={"email": email, "password": "correcthorsebattery1"},
         )
         old_session_token = login_r.cookies["session"]
+        csrf = login_r.cookies.get("csrf_token", "")
 
         # Create a reset token directly in DB
         async with async_session_factory() as db:
@@ -126,10 +129,11 @@ async def test_reset_complete_success_invalidates_all_sessions() -> None:
             db.add(prt)
             await db.commit()
 
-        # Complete the reset
+        # Complete the reset — CSRF required (user has an active session)
         r = await c.post(
             "/api/v1/auth/password-reset/complete",
             json={"token": token, "new_password": "newpassword123456"},
+            headers={"X-CSRF-Token": csrf},
         )
         assert r.status_code == 200
 
@@ -153,10 +157,11 @@ async def test_reset_complete_used_token_rejected(client: AsyncClient) -> None:
 
     email = "tokenreuse@example.com"
     async with client as c:
-        await c.post(
+        reg_r = await c.post(
             "/api/v1/auth/register",
             json={"email": email, "password": "correcthorsebattery1"},
         )
+        csrf = reg_r.cookies.get("csrf_token", "")
         async with async_session_factory() as db:
             result = await db.execute(select(User).where(User.email == email))
             user = result.scalar_one()
@@ -169,16 +174,18 @@ async def test_reset_complete_used_token_rejected(client: AsyncClient) -> None:
             db.add(prt)
             await db.commit()
 
-        # First use: success
+        # First use: success — CSRF required (user has an active session)
         r1 = await c.post(
             "/api/v1/auth/password-reset/complete",
             json={"token": token, "new_password": "newpassword123456"},
+            headers={"X-CSRF-Token": csrf},
         )
         assert r1.status_code == 200
 
-        # Second use: error
+        # Second use: error — token already used; CSRF header still required
         r2 = await c.post(
             "/api/v1/auth/password-reset/complete",
             json={"token": token, "new_password": "anotherpassword123"},
+            headers={"X-CSRF-Token": csrf},
         )
     assert r2.status_code == 400
