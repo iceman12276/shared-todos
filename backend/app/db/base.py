@@ -1,12 +1,22 @@
+from collections.abc import AsyncGenerator
+from uuid import UUID
+
+from sqlalchemy import MetaData
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
 from app.config import settings
 
-# Normalize sync psycopg3 URL to async dialect (CI sets postgresql+psycopg://).
-_db_url = settings.database_url.replace("postgresql+psycopg://", "postgresql+psycopg_async://")
+# Standard constraint naming so Alembic autogenerate produces consistent names.
+_naming_convention: dict[str, str] = {
+    "ix": "ix_%(column_0_label)s",
+    "uq": "uq_%(table_name)s_%(column_0_name)s",
+    "ck": "ck_%(table_name)s_%(constraint_name)s",
+    "fk": "fk_%(table_name)s_%(column_0_name)s_%(referred_table_name)s",
+    "pk": "pk_%(table_name)s",
+}
 
-_engine = create_async_engine(_db_url, echo=False)
+_engine = create_async_engine(settings.database_url, echo=False)
 
 async_session_factory: async_sessionmaker[AsyncSession] = async_sessionmaker(
     _engine, expire_on_commit=False
@@ -14,4 +24,12 @@ async_session_factory: async_sessionmaker[AsyncSession] = async_sessionmaker(
 
 
 class Base(DeclarativeBase):
-    pass
+    metadata = MetaData(naming_convention=_naming_convention)
+    type_annotation_map = {
+        UUID: UUID,
+    }
+
+
+async def get_session() -> AsyncGenerator[AsyncSession, None]:
+    async with async_session_factory() as session:
+        yield session

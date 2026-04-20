@@ -14,10 +14,8 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Normalize to the async dialect: psycopg3 sync URLs from CI use postgresql+psycopg://
-# but the async engine requires postgresql+psycopg_async://.
-_db_url = settings.database_url.replace("postgresql+psycopg://", "postgresql+psycopg_async://")
-config.set_main_option("sqlalchemy.url", _db_url)
+# settings.database_url is already normalized to psycopg_async dialect.
+config.set_main_option("sqlalchemy.url", settings.database_url)
 
 target_metadata = Base.metadata
 

@@ -1,8 +1,8 @@
 import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.base import async_session_factory
 from app.main import app
 
 
@@ -15,8 +15,7 @@ async def test_health_endpoint_responds_200() -> None:
 
 
 @pytest.mark.asyncio
-async def test_app_can_connect_to_db() -> None:
-    async with async_session_factory() as session:
-        result = await session.execute(text("SELECT 1"))
-        row = result.scalar()
+async def test_app_can_connect_to_db(db_session: AsyncSession) -> None:
+    result = await db_session.execute(text("SELECT 1"))
+    row = result.scalar()
     assert row == 1
