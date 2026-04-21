@@ -1,0 +1,12 @@
+# Semgrep ignore patterns — applies to both `semgrep ci` and `semgrep scan`
+# invocations at repo root. Syntax is .gitignore-like.
+#
+# PR-2 lesson: the custom rule fixture directory contains intentionally-broken
+# Python (anti-pattern examples that the rule is designed to catch). Without
+# exclusion, every CI scan fires the rule against its own fixture and fails.
+# This replaced the inline `--exclude backend/semgrep-rules/` flag when the
+# workflow moved from `semgrep scan` to `semgrep ci` (Semgrep App mode),
+# because `semgrep ci` doesn't accept `--exclude` the same way.
+
+# Rule fixtures — intentionally contain anti-patterns the rules catch.
+backend/semgrep-rules/

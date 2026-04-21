@@ -170,17 +170,15 @@ jobs:
       - name: Install semgrep
         run: pip install semgrep
 
-      - name: Semgrep scan (SAST + supply-chain + project-local rules)
-        run: >
-          semgrep scan
-          --error
-          --config p/default
-          --config p/python
-          --config p/owasp-top-ten
-          --config p/secrets
-          --config backend/semgrep-rules/
-          --exclude backend/semgrep-rules/
-          --metrics off
+      # Semgrep CI mode — uploads findings to Semgrep App dashboard for history +
+      # policy enforcement. Matches canonical ~/.claude/references/ci-template.yml.
+      # SEMGREP_APP_TOKEN is a repo-level GitHub secret; rule policy is configured
+      # in the Semgrep App. Project-local rules under backend/semgrep-rules/ are
+      # picked up automatically. Fixture dir excluded via .semgrepignore at repo root.
+      - name: Semgrep CI (SAST + supply-chain + project-local rules)
+        env:
+          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+        run: semgrep ci
 
       - name: Gitleaks (secret scan)
         uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2
