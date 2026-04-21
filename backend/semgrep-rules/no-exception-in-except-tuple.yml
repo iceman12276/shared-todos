@@ -1,0 +1,34 @@
+rules:
+  - id: no-exception-in-except-tuple
+    patterns:
+      - pattern-either:
+          # Exception trailing: except (ValueError, ..., Exception):
+          - pattern: |
+              try:
+                  ...
+              except ($A, ..., Exception):
+                  ...
+          # Exception leading: except (Exception, ...):
+          - pattern: |
+              try:
+                  ...
+              except (Exception, ...):
+                  ...
+          # Exception in middle: except (A, ..., Exception, ...):
+          - pattern: |
+              try:
+                  ...
+              except ($A, ..., Exception, ...):
+                  ...
+    message: >
+      'Exception' in an except tuple defeats exception narrowing.
+      `except (ValueError, Exception)` silently catches everything — the
+      specific types are redundant and unexpected errors are swallowed.
+      Use bare `except ValueError:` or omit 'Exception' from the tuple.
+      See PR #2 hotfix 9c4faf0 for a concrete example of this bug.
+    languages: [python]
+    severity: ERROR
+    metadata:
+      category: security
+      cwe: "CWE-390: Detection of Error Condition Without Action"
+      confidence: HIGH

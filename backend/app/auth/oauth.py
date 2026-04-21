@@ -203,6 +203,11 @@ async def oauth_google_callback(
     display_name = payload.get("name", email.split("@")[0] if email else "")
 
     if not google_sub or not email:
+        _log.warning(
+            "oauth: id_token missing required claim sub=%r email=%r, rejecting",
+            google_sub or None,
+            email or None,
+        )
         return Response(
             status_code=status.HTTP_302_FOUND,
             headers={"location": f"{settings.frontend_url}/register?error=oauth_failed"},
