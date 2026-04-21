@@ -162,18 +162,19 @@ async def test_password_reset_invalidates_all_sessions_multi_device() -> None:
 
 
 @pytest.mark.asyncio
-async def test_oauth_callback_unexpected_exception_propagates_not_redirects() -> None:
-    """Verifier raising RuntimeError must propagate raw, NOT be swallowed into a redirect.
+async def test_oauth_callback_unexpected_exception_returns_500_not_redirect() -> None:
+    """Verifier raising RuntimeError must produce HTTP 500, NOT a 302 redirect.
 
     The hotfix at 9c4faf0 narrowed except to ValueError only. This test locks
-    in that invariant: re-broadening to `except Exception` would swallow the
-    RuntimeError and return a 302 redirect — this test would then fail because
-    no RuntimeError propagates (pytest.raises would not catch it).
+    in that invariant:
+    - assert r.status_code == 500: proves FastAPI's ServerErrorMiddleware caught
+      the unhandled RuntimeError and returned an error response
+    - assert r.status_code != 302: documents the specific invariant — the old
+      `except Exception` swallowed the RuntimeError and returned a 302 redirect
 
-    Note: httpx ASGITransport re-raises unhandled app exceptions into the test
-    process rather than converting them to HTTP 500. We exploit this: the test
-    asserts RuntimeError propagates, which is only true when the except clause
-    does NOT catch Exception-or-wider.
+    Uses raise_app_exceptions=False so httpx converts unhandled app exceptions
+    to HTTP 500 responses (matching real server behavior) rather than re-raising
+    them into the test process.
     """
     from urllib.parse import parse_qs
     from urllib.parse import urlparse as _urlparse
@@ -201,21 +202,32 @@ async def test_oauth_callback_unexpected_exception_propagates_not_redirects() ->
     async def _get_mock_http() -> AsyncGenerator[httpx.AsyncClient, None]:
         yield mock_http_client
 
-    app.dependency_overrides[get_http_client] = _get_mock_http
-    app.dependency_overrides[verify_id_token_dep] = _runtime_verify_dep
-    try:
-        async with AsyncClient(transport=ASGITransport(app=app), base_url=BASE) as c:
-            init_r = await c.get("/api/v1/auth/oauth/google", follow_redirects=False)
-            assert init_r.status_code in (302, 307)
-            state = parse_qs(_urlparse(init_r.headers["location"]).query).get("state", [""])[0]
+    # raise_app_exceptions=False: callback 500 becomes an HTTP response, not a raised exception
+    transport = ASGITransport(app=app, raise_app_exceptions=False)
+    async with AsyncClient(transport=transport, base_url=BASE) as c:
+        # Override only HTTP client to get the state nonce (no verifier override yet)
+        app.dependency_overrides[get_http_client] = _get_mock_http
+        init_r = await c.get("/api/v1/auth/oauth/google", follow_redirects=False)
+        assert init_r.status_code in (302, 307)
+        state = parse_qs(_urlparse(init_r.headers["location"]).query).get("state", [""])[0]
 
-            # RuntimeError must propagate out of the ASGI call — not be swallowed
-            with pytest.raises(RuntimeError, match="unexpected internal error"):
-                await c.get(
-                    "/api/v1/auth/oauth/google/callback",
-                    params={"code": "fake-code", "state": state},
-                    follow_redirects=False,
-                )
-    finally:
-        app.dependency_overrides.pop(get_http_client, None)
-        app.dependency_overrides.pop(verify_id_token_dep, None)
+        # Inject broken verifier AFTER nonce — same client keeps the nonce cookie
+        app.dependency_overrides[verify_id_token_dep] = _runtime_verify_dep
+
+        try:
+            r = await c.get(
+                "/api/v1/auth/oauth/google/callback",
+                params={"code": "fake-code", "state": state},
+                follow_redirects=False,
+            )
+        finally:
+            app.dependency_overrides.pop(get_http_client, None)
+            app.dependency_overrides.pop(verify_id_token_dep, None)
+
+    assert r.status_code == 500, (
+        f"Unexpected verifier exception must produce HTTP 500, got {r.status_code}. "
+        f"If 302: except was re-broadened to catch Exception (swallows error → redirect)."
+    )
+    assert r.status_code != 302, (
+        "302 here means except was broadened to catch Exception — narrowed-except invariant broken."
+    )
