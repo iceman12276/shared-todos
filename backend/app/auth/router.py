@@ -213,15 +213,15 @@ async def password_reset_complete(
     user_result = await db.execute(select(User).where(User.id == prt.user_id))
     user = user_result.scalar_one()
 
-    # Single transaction: mark token used + update password atomically.
-    # Two separate commits would leave the token burned but password unchanged
-    # on a crash between them, locking the user out permanently.
+    # Single transaction: mark token used + update password + invalidate sessions.
+    # All three mutations commit atomically — a crash at any point leaves the
+    # user's password unchanged and the reset token re-usable (preferred over
+    # partial state). US-107 requires session invalidation as part of the
+    # successful-reset guarantee.
     prt.used_at = now
     user.password_hash = hash_password(body.new_password)
+    await invalidate_all_user_sessions(db, user.id, commit=False)
     await db.commit()
-
-    # Invalidate ALL sessions for this user (US-107 hard requirement)
-    await invalidate_all_user_sessions(db, user.id)
     _log.info(
         "password-reset complete: password updated + all sessions invalidated user_id=%s", user.id
     )

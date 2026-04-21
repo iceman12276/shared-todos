@@ -34,7 +34,13 @@ async def invalidate_session(db: AsyncSession, token: str) -> None:
     await db.commit()
 
 
-async def invalidate_all_user_sessions(db: AsyncSession, user_id: UUID) -> None:
-    """Invalidate all sessions for a user — called on password reset (US-107)."""
+async def invalidate_all_user_sessions(
+    db: AsyncSession, user_id: UUID, *, commit: bool = True
+) -> None:
+    """Invalidate all sessions for a user — called on password reset (US-107).
+
+    Pass commit=False when the caller needs to batch this into a larger transaction.
+    """
     await db.execute(delete(Session).where(Session.user_id == user_id))
-    await db.commit()
+    if commit:
+        await db.commit()

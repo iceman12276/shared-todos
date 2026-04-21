@@ -16,8 +16,6 @@ google.oauth2.id_token.verify_oauth2_token — which fetches Google's JWKS,
 verifies RS256 signature, and checks iss/aud/exp.
 """
 
-import binascii
-import json
 import logging
 import secrets
 from collections.abc import AsyncGenerator
@@ -184,7 +182,7 @@ async def oauth_google_callback(
 
     try:
         payload = verify_token(id_token_str, settings.google_client_id)
-    except (ValueError, json.JSONDecodeError, binascii.Error, Exception) as exc:
+    except ValueError as exc:
         _log.error("oauth: id_token verification failed error=%r", exc)
         return Response(
             status_code=status.HTTP_302_FOUND,

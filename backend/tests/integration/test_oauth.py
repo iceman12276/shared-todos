@@ -268,17 +268,23 @@ async def test_oauth_callback_unverified_email_rejected(
 
 
 @pytest.mark.asyncio
-async def test_oauth_callback_invalid_token_rejected(
-    override_http_client_only: None,
-) -> None:
-    """Malformed id_token must redirect to error (CRITICAL-1)."""
+async def test_oauth_callback_invalid_token_rejected() -> None:
+    """Malformed id_token must redirect to error (CRITICAL-1).
+
+    Uses the test verifier (not production google-auth) — _test_verifier raises
+    ValueError for a malformed token, matching what google-auth raises in production.
+    This keeps the test hermetic (no network, no optional requests dep).
+    """
     bad_token_client = _make_mock_http_client("not.a.valid.jwt.at.all")
 
     async def _get_bad_client() -> AsyncGenerator[httpx.AsyncClient, None]:
         yield bad_token_client
 
+    async def _bad_verify_dep() -> AsyncGenerator[Any, None]:
+        yield _test_verifier  # raises ValueError("Invalid token format") for malformed token
+
     app.dependency_overrides[get_http_client] = _get_bad_client
-    # Leave verify_id_token_dep at default (production google-auth) — it will reject the bad token
+    app.dependency_overrides[verify_id_token_dep] = _bad_verify_dep
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url=BASE) as c:
             init_r = await c.get("/api/v1/auth/oauth/google", follow_redirects=False)
@@ -291,6 +297,7 @@ async def test_oauth_callback_invalid_token_rejected(
             )
     finally:
         app.dependency_overrides.pop(get_http_client, None)
+        app.dependency_overrides.pop(verify_id_token_dep, None)
 
     assert r.status_code in (302, 307)
     assert "error=oauth_failed" in r.headers["location"]
