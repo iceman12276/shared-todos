@@ -170,7 +170,7 @@ jobs:
       - name: Install semgrep
         run: pip install semgrep
 
-      - name: Semgrep scan (SAST + supply-chain)
+      - name: Semgrep scan (SAST + supply-chain + project-local rules)
         run: >
           semgrep scan
           --error
@@ -178,6 +178,7 @@ jobs:
           --config p/python
           --config p/owasp-top-ten
           --config p/secrets
+          --config backend/semgrep-rules/
           --metrics off
 
       - name: Gitleaks (secret scan)
