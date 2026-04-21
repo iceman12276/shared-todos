@@ -11,17 +11,35 @@ Role = Literal["owner", "editor", "viewer"]
 
 # Actions that each role is permitted to perform.
 _ALLOWED: dict[str, frozenset[str]] = {
-    "owner": frozenset([
-        "read_list", "list_items", "create_item", "update_item", "delete_item",
-        "rename_list", "share_list", "change_collaborator_role", "revoke_share",
-        "delete_list",
-    ]),
-    "editor": frozenset([
-        "read_list", "list_items", "create_item", "update_item", "delete_item",
-    ]),
-    "viewer": frozenset([
-        "read_list", "list_items",
-    ]),
+    "owner": frozenset(
+        [
+            "read_list",
+            "list_items",
+            "create_item",
+            "update_item",
+            "delete_item",
+            "rename_list",
+            "share_list",
+            "change_collaborator_role",
+            "revoke_share",
+            "delete_list",
+        ]
+    ),
+    "editor": frozenset(
+        [
+            "read_list",
+            "list_items",
+            "create_item",
+            "update_item",
+            "delete_item",
+        ]
+    ),
+    "viewer": frozenset(
+        [
+            "read_list",
+            "list_items",
+        ]
+    ),
 }
 
 _ALL_ACTIONS = frozenset().union(*_ALLOWED.values())

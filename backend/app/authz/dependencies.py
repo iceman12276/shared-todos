@@ -65,9 +65,7 @@ def require_list_permission(
 
         # Check if caller has a share row
         share_result = await db.execute(
-            sa.select(Share.role).where(
-                Share.list_id == list_id, Share.user_id == user.id
-            )
+            sa.select(Share.role).where(Share.list_id == list_id, Share.user_id == user.id)
         )
         share_role = share_result.scalar_one_or_none()
 

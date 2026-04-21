@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.main import app
 from app.models.list_ import List
 from app.models.share import Share
+from app.models.user import User
 from tests.integration.helpers import register_user
 
 BASE = "http://test"
@@ -24,11 +25,10 @@ LISTS_URL = "/api/v1/lists"
 async def _login(client: AsyncClient, email: str, password: str) -> None:
     """Login and inject CSRF token into client headers for subsequent mutations."""
     r = await client.post("/api/v1/auth/login", json={"email": email, "password": password})
-    csrf = r.cookies.get("csrf_token", "")
-    client.headers["X-CSRF-Token"] = csrf
+    client.headers["X-CSRF-Token"] = r.cookies.get("csrf_token") or ""
 
 
-async def _seed_list(db: AsyncSession, owner_email: str = "owner@example.com") -> tuple:
+async def _seed_list(db: AsyncSession, owner_email: str = "owner@example.com") -> tuple[User, List]:
     """Seed an owner user + list, return (owner, list)."""
     owner = await register_user(db, owner_email, "Owner", "Pass1234!")
     lst = List(owner_id=owner.id, name="My List")
@@ -39,6 +39,7 @@ async def _seed_list(db: AsyncSession, owner_email: str = "owner@example.com") -
 
 
 # ── POST /api/v1/lists ──────────────────────────────────────────────────────
+
 
 @pytest.mark.anyio
 async def test_create_list_success(db_session: AsyncSession) -> None:
@@ -74,6 +75,7 @@ async def test_create_list_empty_name_rejected(db_session: AsyncSession) -> None
 
 
 # ── GET /api/v1/lists ───────────────────────────────────────────────────────
+
 
 @pytest.mark.anyio
 async def test_list_lists_shows_owned(db_session: AsyncSession) -> None:
@@ -120,6 +122,7 @@ async def test_list_lists_excludes_strangers_lists(db_session: AsyncSession) -> 
 
 
 # ── GET /api/v1/lists/{id} ──────────────────────────────────────────────────
+
 
 @pytest.mark.anyio
 async def test_get_list_owner(db_session: AsyncSession) -> None:
@@ -176,6 +179,7 @@ async def test_get_list_stranger_404(db_session: AsyncSession) -> None:
 
 # ── PATCH /api/v1/lists/{id} ────────────────────────────────────────────────
 
+
 @pytest.mark.anyio
 async def test_rename_list_owner(db_session: AsyncSession) -> None:
     owner, lst = await _seed_list(db_session)
@@ -229,6 +233,7 @@ async def test_rename_list_stranger_denied(db_session: AsyncSession) -> None:
 
 
 # ── DELETE /api/v1/lists/{id} ───────────────────────────────────────────────
+
 
 @pytest.mark.anyio
 async def test_delete_list_owner(db_session: AsyncSession) -> None:

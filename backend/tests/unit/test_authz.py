@@ -26,9 +26,16 @@ class TestEffectiveRole:
 class TestCanPerform:
     def test_owner_can_do_everything(self) -> None:
         actions = [
-            "read_list", "list_items", "create_item", "update_item",
-            "delete_item", "rename_list", "share_list",
-            "change_collaborator_role", "revoke_share", "delete_list",
+            "read_list",
+            "list_items",
+            "create_item",
+            "update_item",
+            "delete_item",
+            "rename_list",
+            "share_list",
+            "change_collaborator_role",
+            "revoke_share",
+            "delete_list",
         ]
         for action in actions:
             assert can_perform("owner", action), f"owner should be able to {action}"

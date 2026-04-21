@@ -40,9 +40,7 @@ async def list_lists(
     owned_lists = list(owned.scalars().all())
 
     shared_result = await db.execute(
-        sa.select(List)
-        .join(Share, Share.list_id == List.id)
-        .where(Share.user_id == user.id)
+        sa.select(List).join(Share, Share.list_id == List.id).where(Share.user_id == user.id)
     )
     shared_lists = list(shared_result.scalars().all())
 
