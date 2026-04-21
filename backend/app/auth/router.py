@@ -70,7 +70,7 @@ async def register(
     token = await create_session(db, user.id, ttl_days=settings.session_ttl_days)
     set_auth_cookies(response, token)
     _log.info("register: new user created user_id=%s", user.id)
-    return {"user": _user_out(user)}
+    return {"user": _user_out(user), "message": "Account created successfully."}
 
 
 @router.post("/login", status_code=status.HTTP_200_OK)

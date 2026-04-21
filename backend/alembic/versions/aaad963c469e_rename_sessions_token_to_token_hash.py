@@ -33,6 +33,8 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     """Downgrade schema."""
+    # Hashes are unrecoverable; clear sessions before restoring NOT NULL token column.
+    op.execute("DELETE FROM sessions")
     op.add_column(
         "sessions", sa.Column("token", sa.VARCHAR(length=128), autoincrement=False, nullable=False)
     )
