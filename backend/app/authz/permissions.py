@@ -5,7 +5,10 @@ This module contains pure logic — no DB, no FastAPI. Dependency wiring
 lives in app.authz.dependencies.
 """
 
+import logging
 from typing import Literal
+
+_log = logging.getLogger(__name__)
 
 Role = Literal["owner", "editor", "viewer"]
 
@@ -56,6 +59,8 @@ def effective_role(*, is_owner: bool, share_role: str | None) -> Role | None:
         return "editor"
     if share_role == "viewer":
         return "viewer"
+    if share_role is not None:
+        _log.error("authz: unknown share_role %r — treating as no access", share_role)
     return None
 
 
