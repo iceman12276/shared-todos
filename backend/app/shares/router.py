@@ -3,6 +3,7 @@ from uuid import UUID
 
 import sqlalchemy as sa
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.authz.dependencies import ListPermission, require_list_permission
@@ -41,7 +42,18 @@ async def create_share(
 
     share = Share(list_id=perm.list_id, user_id=body.user_id, role=body.role)
     db.add(share)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError as exc:
+        await db.rollback()
+        orig = str(exc.orig)
+        if "pk_shares" in orig:
+            # Duplicate-key race: concurrent request won the insert first
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT, detail="User already has access"
+            ) from exc
+        # FK violation: target user deleted between our SELECT and INSERT
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found") from exc
     await db.refresh(share)
     _log.info("share: created list_id=%s user_id=%s role=%s", perm.list_id, body.user_id, body.role)
     return share

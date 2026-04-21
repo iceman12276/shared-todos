@@ -13,8 +13,11 @@ Edge cases:
 - Revoking non-existent share returns 404
 """
 
+from unittest.mock import patch
+
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.main import app
@@ -293,5 +296,70 @@ async def test_revoke_share_nonexistent(db_session: AsyncSession) -> None:
     async with AsyncClient(transport=ASGITransport(app=app), base_url=BASE) as c:
         await _login(c, "owner17@example.com", "Pass1234!")
         r = await c.delete(_share_url(lst.id, ghost.id))
+
+    assert r.status_code == 404
+
+
+# ── IntegrityError race-condition handling ────────────────────────────────────
+
+
+@pytest.mark.anyio
+async def test_create_share_duplicate_pk_race_returns_409(db_session: AsyncSession) -> None:
+    """Race: SELECT misses concurrent INSERT; PK violation on commit → 409, not 500."""
+    owner, lst = await _seed(db_session, "owner18@example.com")
+    target = await register_user(db_session, "target18@example.com", "T18", "Pass1234!")
+
+    # Simulate the race: patch commit to raise IntegrityError with PK constraint name.
+    orig_commit = AsyncSession.commit
+    call_count = 0
+
+    async def _raise_pk_integrity(self: AsyncSession) -> None:
+        nonlocal call_count
+        call_count += 1
+        # First commit is the login session commit; raise on the second (share insert).
+        if call_count >= 2:
+            raise IntegrityError(
+                "INSERT INTO shares ...",
+                {},
+                Exception("duplicate key value violates unique constraint \"pk_shares\""),
+            )
+        await orig_commit(self)
+
+    with patch.object(AsyncSession, "commit", _raise_pk_integrity):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url=BASE) as c:
+            await _login(c, "owner18@example.com", "Pass1234!")
+            r = await c.post(
+                _shares_url(lst.id), json={"user_id": str(target.id), "role": "viewer"}
+            )
+
+    assert r.status_code == 409
+
+
+@pytest.mark.anyio
+async def test_create_share_fk_violation_returns_404(db_session: AsyncSession) -> None:
+    """Race: target user deleted between SELECT and INSERT; FK violation on commit → 404."""
+    owner, lst = await _seed(db_session, "owner19@example.com")
+    target = await register_user(db_session, "target19@example.com", "T19", "Pass1234!")
+
+    orig_commit = AsyncSession.commit
+    call_count = 0
+
+    async def _raise_fk_integrity(self: AsyncSession) -> None:
+        nonlocal call_count
+        call_count += 1
+        if call_count >= 2:
+            raise IntegrityError(
+                "INSERT INTO shares ...",
+                {},
+                Exception("violates foreign key constraint \"fk_shares_user_id_users\""),
+            )
+        await orig_commit(self)
+
+    with patch.object(AsyncSession, "commit", _raise_fk_integrity):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url=BASE) as c:
+            await _login(c, "owner19@example.com", "Pass1234!")
+            r = await c.post(
+                _shares_url(lst.id), json={"user_id": str(target.id), "role": "viewer"}
+            )
 
     assert r.status_code == 404
