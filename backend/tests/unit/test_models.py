@@ -47,8 +47,8 @@ class TestSessionModel:
         col = _col(Session, "id")
         assert isinstance(col.type, sa.Uuid)
 
-    def test_token_unique(self) -> None:
-        col = _col(Session, "token")
+    def test_token_hash_unique(self) -> None:
+        col = _col(Session, "token_hash")
         assert col.unique
 
     def test_user_id_fk(self) -> None:

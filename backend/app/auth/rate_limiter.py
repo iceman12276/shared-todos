@@ -22,11 +22,17 @@ _log = logging.getLogger("app.auth.rate_limiter")
 _store: dict[str, list[datetime]] = defaultdict(list)
 _lock = Lock()
 
+# Read once at module import; patchable in tests via monkeypatch.setattr.
+# Only trust XFF when running behind a known reverse proxy — trusting it
+# unconditionally lets clients spoof any IP by setting the header themselves.
+_TRUST_PROXY: bool = settings.trust_proxy
+
 
 def _client_ip(request: Request) -> str:
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
+    if _TRUST_PROXY:
+        forwarded = request.headers.get("X-Forwarded-For")
+        if forwarded:
+            return forwarded.split(",")[0].strip()
     if request.client:
         return request.client.host
     return "unknown"

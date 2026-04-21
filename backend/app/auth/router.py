@@ -210,13 +210,13 @@ async def password_reset_complete(
     if prt is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_or_used")
 
-    # Mark token as used (single-use)
-    prt.used_at = now
-    await db.commit()
-
-    # Update password
     user_result = await db.execute(select(User).where(User.id == prt.user_id))
     user = user_result.scalar_one()
+
+    # Single transaction: mark token used + update password atomically.
+    # Two separate commits would leave the token burned but password unchanged
+    # on a crash between them, locking the user out permanently.
+    prt.used_at = now
     user.password_hash = hash_password(body.new_password)
     await db.commit()
 

@@ -31,6 +31,11 @@ class Settings(BaseSettings):
     # Set True in production (HTTPS). Dev/CI default is False (HTTP only).
     cookie_secure: bool = False
 
+    # Set True when running behind a trusted reverse proxy that sets X-Forwarded-For.
+    # Keep False (default) for direct connections — trusting XFF unconditionally
+    # allows IP spoofing by clients that set the header themselves.
+    trust_proxy: bool = False
+
     @field_validator("database_url")
     @classmethod
     def normalize_db_dialect(cls, v: str) -> str:
