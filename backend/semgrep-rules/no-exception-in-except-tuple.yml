@@ -2,30 +2,48 @@ rules:
   - id: no-exception-in-except-tuple
     patterns:
       - pattern-either:
-          # Exception trailing: except (ValueError, ..., Exception):
+          # trailing, no alias: except (A, ..., Exception):
           - pattern: |
               try:
                   ...
               except ($A, ..., Exception):
                   ...
-          # Exception leading: except (Exception, ...):
+          # trailing, with alias: except (A, ..., Exception) as e:
           - pattern: |
               try:
                   ...
-              except (Exception, ...):
+              except ($A, ..., Exception) as $E:
                   ...
-          # Exception in middle: except (A, ..., Exception, ...):
+          # leading, no alias: except (Exception, A, ...):
           - pattern: |
               try:
                   ...
-              except ($A, ..., Exception, ...):
+              except (Exception, $A, ...):
+                  ...
+          # leading, with alias: except (Exception, A, ...) as e:
+          - pattern: |
+              try:
+                  ...
+              except (Exception, $A, ...) as $E:
+                  ...
+          # middle, no alias: except (A, ..., Exception, B, ...):
+          - pattern: |
+              try:
+                  ...
+              except ($A, ..., Exception, $B, ...):
+                  ...
+          # middle, with alias: except (A, ..., Exception, B, ...) as e:
+          - pattern: |
+              try:
+                  ...
+              except ($A, ..., Exception, $B, ...) as $E:
                   ...
     message: >
       'Exception' in an except tuple defeats exception narrowing.
       `except (ValueError, Exception)` silently catches everything — the
       specific types are redundant and unexpected errors are swallowed.
       Use bare `except ValueError:` or omit 'Exception' from the tuple.
-      See PR #2 hotfix 9c4faf0 for a concrete example of this bug.
+      See Group G regression class (commit 4a10454) for a concrete example.
     languages: [python]
     severity: ERROR
     metadata:
