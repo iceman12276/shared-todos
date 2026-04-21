@@ -321,7 +321,7 @@ async def test_create_share_duplicate_pk_race_returns_409(db_session: AsyncSessi
             raise IntegrityError(
                 "INSERT INTO shares ...",
                 {},
-                Exception("duplicate key value violates unique constraint \"pk_shares\""),
+                Exception('duplicate key value violates unique constraint "pk_shares"'),
             )
         await orig_commit(self)
 
@@ -351,7 +351,7 @@ async def test_create_share_fk_violation_returns_404(db_session: AsyncSession) -
             raise IntegrityError(
                 "INSERT INTO shares ...",
                 {},
-                Exception("violates foreign key constraint \"fk_shares_user_id_users\""),
+                Exception('violates foreign key constraint "fk_shares_user_id_users"'),
             )
         await orig_commit(self)
 
