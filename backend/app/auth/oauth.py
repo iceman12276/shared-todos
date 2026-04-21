@@ -12,6 +12,7 @@ a pre-configured mock transport without needing global HTTP interception.
 
 import base64
 import json
+import logging
 import secrets
 from collections.abc import AsyncGenerator
 from typing import Any
@@ -26,6 +27,8 @@ from app.auth.session import create_session
 from app.config import settings
 from app.db.base import get_session
 from app.models.user import User
+
+_log = logging.getLogger("app.auth.oauth")
 
 router = APIRouter(prefix="/api/v1/auth/oauth", tags=["oauth"])
 
@@ -167,6 +170,7 @@ async def oauth_google_callback(
     )
 
     if token_r.status_code != 200:
+        _log.error("oauth: google token exchange failed status=%d", token_r.status_code)
         return Response(
             status_code=status.HTTP_302_FOUND,
             headers={"location": f"{settings.frontend_url}/register?error=oauth_failed"},
@@ -178,6 +182,7 @@ async def oauth_google_callback(
     try:
         payload = _decode_id_token_payload(id_token)
     except (ValueError, Exception):
+        _log.error("oauth: id_token decode failed")
         return Response(
             status_code=status.HTTP_302_FOUND,
             headers={"location": f"{settings.frontend_url}/register?error=oauth_failed"},
@@ -204,10 +209,16 @@ async def oauth_google_callback(
         db.add(user)
         await db.commit()
         await db.refresh(user)
+        _log.info("oauth: new user created via google sub=%s user_id=%s", google_sub, user.id)
     elif user.google_sub is None:
         # Link existing email+password account to Google (US-103)
         user.google_sub = google_sub
         await db.commit()
+        _log.info(
+            "oauth: linked google account to existing user user_id=%s sub=%s", user.id, google_sub
+        )
+    else:
+        _log.info("oauth: existing google user signed in user_id=%s", user.id)
 
     token = await create_session(db, user.id, ttl_days=settings.session_ttl_days)
 

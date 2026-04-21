@@ -1,4 +1,4 @@
-import contextlib
+import logging
 import secrets
 from datetime import UTC, datetime, timedelta
 
@@ -28,6 +28,8 @@ from app.models.password_reset_token import PasswordResetToken
 from app.models.user import User
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
+
+_log = logging.getLogger("app.auth")
 
 _GENERIC_AUTH_ERROR = "Invalid credentials"
 _COOKIE_NAME = "session"
@@ -73,6 +75,7 @@ async def register(
         # success branch (US-101). Without matching cookies an attacker can
         # distinguish "email exists" from "email free" via response headers.
         _set_auth_cookies(response, secrets.token_urlsafe(32))
+        _log.info("register: duplicate email attempt (anti-enum response sent)")
         msg = "If this email is available, your account has been created."
         return {"user": None, "message": msg}
 
@@ -88,6 +91,7 @@ async def register(
 
     token = await create_session(db, user.id, ttl_days=settings.session_ttl_days)
     _set_auth_cookies(response, token)
+    _log.info("register: new user created user_id=%s", user.id)
     return {"user": _user_out(user)}
 
 
@@ -109,6 +113,7 @@ async def login(
     if user is None or user.password_hash is None:
         verify_password(body.password, make_dummy_hash())
         record_failed_login(request)
+        _log.warning("login: failed attempt for unknown/oauth-only email")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=_GENERIC_AUTH_ERROR,
@@ -116,6 +121,7 @@ async def login(
 
     if not verify_password(body.password, user.password_hash):
         record_failed_login(request)
+        _log.warning("login: wrong password for user_id=%s", user.id)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=_GENERIC_AUTH_ERROR,
@@ -124,6 +130,7 @@ async def login(
     reset_failed_logins(request)
     token = await create_session(db, user.id, ttl_days=settings.session_ttl_days)
     _set_auth_cookies(response, token)
+    _log.info("login: success user_id=%s", user.id)
     return {"user": _user_out(user)}
 
 
@@ -136,6 +143,9 @@ async def logout(
     token = request.cookies.get(_COOKIE_NAME)
     if token:
         await invalidate_session(db, token)
+        _log.info("logout: session invalidated")
+    else:
+        _log.info("logout: no session cookie present")
     response.delete_cookie(_COOKIE_NAME)
 
 
@@ -159,7 +169,9 @@ async def password_reset_request(
     if user is not None:
         if user.password_hash is None:
             # Google-only account: no reset email, but still opaque response
-            pass
+            _log.info(
+                "password-reset request: google-only account, no email sent user_id=%s", user.id
+            )
         else:
             token = generate_reset_token()
             prt = PasswordResetToken(
@@ -169,8 +181,13 @@ async def password_reset_request(
             )
             db.add(prt)
             await db.commit()
-            with contextlib.suppress(Exception):  # best-effort: don't leak send failures
+            try:
                 await send_password_reset_email(body.email, token)
+                _log.info("password-reset request: email sent user_id=%s", user.id)
+            except Exception as exc:  # best-effort: don't leak send failures
+                _log.error(
+                    "password-reset request: SMTP send failed user_id=%s error=%r", user.id, exc
+                )
 
     return {"message": "If an account exists for this email, a reset link has been sent."}
 
@@ -227,5 +244,8 @@ async def password_reset_complete(
 
     # Invalidate ALL sessions for this user (US-107 hard requirement)
     await invalidate_all_user_sessions(db, user.id)
+    _log.info(
+        "password-reset complete: password updated + all sessions invalidated user_id=%s", user.id
+    )
 
     return {"message": "Password updated. All sessions have been invalidated."}

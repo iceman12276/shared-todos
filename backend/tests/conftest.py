@@ -5,6 +5,7 @@ import pytest_asyncio
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
+from app.auth.rate_limiter import _store as _rate_limit_store
 from app.db.base import _engine
 
 _factory: async_sessionmaker[AsyncSession] = async_sessionmaker(_engine, expire_on_commit=False)
@@ -34,6 +35,10 @@ async def _db_cleanup() -> AsyncGenerator[None, None]:
     async with _factory() as session:
         await session.execute(_TRUNCATE)
         await session.commit()
+    # Reset in-memory rate-limit store so tests don't bleed failed-attempt
+    # counts into each other. The store is module-level state; DB truncate
+    # alone does not clear it.
+    _rate_limit_store.clear()
     yield
 
 
