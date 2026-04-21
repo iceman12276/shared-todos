@@ -19,3 +19,10 @@ class User(Base):
     updated_at: Mapped[datetime] = mapped_column(
         server_default=sa.func.now(), onupdate=sa.func.now()
     )
+
+    __table_args__ = (
+        sa.CheckConstraint(
+            "password_hash IS NOT NULL OR google_sub IS NOT NULL",
+            name="ck_users_has_auth_method",
+        ),
+    )

@@ -14,6 +14,7 @@ async def sample_user(db_session: AsyncSession) -> User:
         email="alice@example.com",
         display_name="Alice",
         password_hash=None,
+        google_sub="google-sub-alice",
     )
     db_session.add(user)
     await db_session.commit()

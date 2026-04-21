@@ -42,9 +42,14 @@ class CSRFMiddleware(BaseHTTPMiddleware):
 
         cookie_token = request.cookies.get(_CSRF_COOKIE, "")
 
-        # Only enforce CSRF when the browser already has a csrf_token cookie.
-        # Unauthenticated requests (e.g., password-reset/request from an
-        # unlogged-in browser) have no session to protect — CSRF is moot.
+        # Skip CSRF enforcement when the browser has no csrf_token cookie.
+        # Scope assumption: the only unauthenticated mutating endpoint reachable
+        # without a session cookie is /password-reset/request, which is already
+        # anti-enumerated and gated by a 32-byte single-use token on /complete.
+        # If a future endpoint is added that is (a) unauthenticated AND (b) has
+        # meaningful side-effects beyond the reset flow, this skip-branch MUST
+        # be revisited — add an explicit path exemption rather than relying on
+        # the absence of a cookie.
         if not cookie_token:
             return await call_next(request)
 

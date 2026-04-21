@@ -18,6 +18,7 @@ async def test_session_row_stores_hash_not_raw_token() -> None:
             email="hashtest@example.com",
             display_name="hashtest",
             password_hash=None,
+            google_sub="google-sub-hashtest",
         )
         db.add(user)
         await db.commit()
@@ -44,6 +45,7 @@ async def test_session_lookup_by_raw_token_resolves_user() -> None:
             email="hashlookup@example.com",
             display_name="hashlookup",
             password_hash=None,
+            google_sub="google-sub-hashlookup",
         )
         db.add(user)
         await db.commit()
