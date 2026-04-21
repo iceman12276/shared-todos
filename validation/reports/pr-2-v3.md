@@ -71,9 +71,10 @@ The relevant counterfactual is: what would have happened if this rule existed wh
 1. **Patch the rule YAML** — for each of the 3 existing `pattern:` entries, add a sibling variant with `as $E:` clause (~10-15 LOC YAML). Result: 6 patterns total covering the cartesian {trailing, leading, middle} × {no-alias, alias}.
 2. **Add fixture file** — `backend/semgrep-rules/tests/except-tuple-with-exception.fixture.py` containing 6 should-fire lines + ≥2 should-NOT-fire lines (e.g., bare `except ValueError as exc:`, bare `except Exception as exc:` — the latter models the legitimate SMTP swallow at `router.py:165`). ~10 LOC Python.
 3. **Wire a fixture-test step into CI** — `.github/workflows/ci.yml` security-gate job invokes `semgrep --test backend/semgrep-rules/` so every future rule edit is empirically verified. (`semgrep --test` reads inline `# ruleid:` / `# ok:` markers in fixtures as expected-fire / expected-no-fire assertions.) ~3 LOC YAML.
-4. **Verify post-patch** — same hand-run of code-reviewer's original Group G fixture line. Must fire. Must not fire on `oauth.py:185` / `router.py:165` legitimate patterns.
+4. **Verify post-patch** — same hand-run of code-reviewer's original Group G fixture line + orchestrator's 5-line tiebreaker fixture at `/tmp/v3_rule_tiebreaker.py`. Must fire on all 3 alias variants + all 3 no-alias variants. Must not fire on `oauth.py:185` / `router.py:165` legitimate patterns.
+5. **MINOR INFO (bonus, orchestrator-identified during tiebreaker):** the rule's `message:` field cites commit `9c4faf0` — the *hotfix* that corrected Group G, not the regression itself. For accuracy, cite the commit that *introduced* the anti-pattern (`4a10454`), or better: remove the SHA entirely and describe the bug class. Commit-body SHAs rot over git history (rebase, squash); class descriptions do not. ~1 LOC YAML edit, fold into the same v4 commit if backend-dev is already touching the file.
 
-Estimated total: ~25 LOC + CI wire. Single-commit same-day close.
+Estimated total: ~25 LOC + CI wire + 1-line SHA/message fix. Single-commit same-day close.
 
 ---
 
@@ -137,8 +138,17 @@ Three specialists this cycle (type-design/comment-analyzer/code-simplifier skipp
 
 ## Convergent-Signal Notes (Adjudications Recorded)
 
-### F1 partitioned-coverage picture — NOT a contradiction
-code-reviewer (empirical, alias axis → 0 findings) + security-reviewer (empirical, tuple-position axis → 3 findings) + silent-failure-hunter (static analysis, claimed alias covered → overturned) together form a partitioned-coverage picture, not a disagreement. The fixtures did not overlap on `as <alias>`. **Both empirical results correct on their own inputs.** F1 stands.
+### F1 partitioned-coverage picture — NOT a contradiction (confirmed by orchestrator tiebreaker)
+code-reviewer (empirical, alias axis → 0 findings) + security-reviewer (empirical, tuple-position axis → 3 findings) + silent-failure-hunter (static analysis, claimed alias covered → overturned) together form a partitioned-coverage picture, not a disagreement. The fixtures did not overlap on `as <alias>`. **All empirical results correct on their own inputs.** F1 stands.
+
+**Orchestrator-run tiebreaker (`/tmp/v3_rule_tiebreaker.py`, 5-line mixed fixture):**
+- alias-trailing → 0 (MISSED)
+- alias-exact-Group-G → 0 (MISSED)
+- alias-leading → 0 (MISSED)
+- no-alias-trailing → 1 (CAUGHT)
+- legitimate bare `except ValueError as exc:` → 0 (correctly not fired)
+
+1 finding total across 5 lines, exactly on the no-alias case. Three independent runs (code-reviewer, security-reviewer partial, orchestrator) are mutually consistent once the partition is acknowledged. F1 reproduces deterministically.
 
 ### Empirical-over-static-analysis (applied recursively to tool meta-tests)
 This is the decisive epistemic rule in this cycle. When two streams disagree on a tool's behavior: the stream that ran the tool wins over the stream that read the tool. And when two streams both run the tool but on different fixtures, the decomposition is: both are correct on their inputs; the union is what covers the design target.
@@ -159,6 +169,10 @@ Same class as: v2-LOW-1 register body-shape claim (PR body said "identical body"
 4. **Claim-code contract accuracy has now recurred 3 times in PR #2.** Strong pattern. Phase 9 proposal: adopt *"PR body and commit body claims about observable behavior must be verified before the body is written, not written-then-verified by a later reviewer."*
 
 5. **v3-IMPORTANT-1 resolution-chain length.** v1 → v2 → v3 closed 12 of 13 + 5-6 of 6 residuals; v3 surfaced a new IMPORTANT (F1) that only materialized because a prior retrospective seed (Semgrep rule for `except (..., Exception, ...)`) was implemented. **Implementing a prior Phase 9 recommendation surfaced a new Phase 9 seed.** Keep the retrospective loop live — it is producing compounding quality.
+
+6. **Orchestrator-run empirical tiebreakers.** When specialist streams disagree on a tool's behavior — even partitioned-coverage disagreements that look like flat contradictions on first read — the orchestrator running the tool directly (1 shell command) is cheaper than routing another specialist round-trip AND eliminates the ambiguity deterministically. Applies recursively with the empirical-over-static-analysis seed: *verify claims against behavior, using the shortest path to behavior.* Fold this pattern into future contradictory-stream adjudication flows.
+
+7. **Commit-body SHA citations should be avoided in durable artifacts (e.g., Semgrep rule `message:` fields, CLAUDE.md, architecture docs).** Git history mutates under rebase/squash/force-push; class descriptions do not. Rule messages that cite SHAs embed a bug-class-identifier into a mutable ref. Prefer: describe the anti-pattern semantically ("tuple `except` clause containing bare `Exception`") rather than git-ref it.
 
 ---
 
