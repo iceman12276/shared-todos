@@ -2,6 +2,7 @@
 
 **Date:** 2026-04-19
 **Status:** APPROVED (2026-04-19)
+**Approval mode:** autonomous (added retroactively 2026-04-21 — greenfield default; engineering-lead self-advances PR-by-PR within the memo scope, orchestrator only relays scope expansions, novel policy decisions, and validation escalations)
 **Slug:** `shared-todos-app`
 **Objective (user verbatim):** Build a shared todos web app where users can register, log in, create todo lists and items, and share lists with other users.
 
