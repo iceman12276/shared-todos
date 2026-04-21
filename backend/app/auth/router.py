@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth.cookies import SESSION_COOKIE_NAME, set_auth_cookies
 from app.auth.dependencies import require_auth
 from app.auth.email import send_password_reset_email
 from app.auth.password import hash_password, make_dummy_hash, verify_password
@@ -32,29 +33,6 @@ router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 _log = logging.getLogger("app.auth")
 
 _GENERIC_AUTH_ERROR = "Invalid credentials"
-_COOKIE_NAME = "session"
-_CSRF_COOKIE = "csrf_token"
-
-
-def _set_auth_cookies(response: Response, session_token: str) -> None:
-    """Set httpOnly session cookie + non-httpOnly CSRF double-submit cookie."""
-    response.set_cookie(
-        key=_COOKIE_NAME,
-        value=session_token,
-        httponly=True,
-        samesite="lax",
-        max_age=settings.session_ttl_days * 86400,
-        secure=settings.cookie_secure,
-    )
-    csrf_token = secrets.token_urlsafe(32)
-    response.set_cookie(
-        key=_CSRF_COOKIE,
-        value=csrf_token,
-        httponly=False,  # nosemgrep: fastapi-cookie-httponly-false  # noqa: E501
-        samesite="lax",
-        max_age=settings.session_ttl_days * 86400,
-        secure=settings.cookie_secure,
-    )
 
 
 def _user_out(user: User) -> dict:  # type: ignore[type-arg]
@@ -74,7 +52,7 @@ async def register(
         # Anti-enumeration: same 201 body AND same Set-Cookie headers as the
         # success branch (US-101). Without matching cookies an attacker can
         # distinguish "email exists" from "email free" via response headers.
-        _set_auth_cookies(response, secrets.token_urlsafe(32))
+        set_auth_cookies(response, secrets.token_urlsafe(32))
         _log.info("register: duplicate email attempt (anti-enum response sent)")
         msg = "If this email is available, your account has been created."
         return {"user": None, "message": msg}
@@ -90,7 +68,7 @@ async def register(
     await db.refresh(user)
 
     token = await create_session(db, user.id, ttl_days=settings.session_ttl_days)
-    _set_auth_cookies(response, token)
+    set_auth_cookies(response, token)
     _log.info("register: new user created user_id=%s", user.id)
     return {"user": _user_out(user)}
 
@@ -129,7 +107,7 @@ async def login(
 
     reset_failed_logins(request)
     token = await create_session(db, user.id, ttl_days=settings.session_ttl_days)
-    _set_auth_cookies(response, token)
+    set_auth_cookies(response, token)
     _log.info("login: success user_id=%s", user.id)
     return {"user": _user_out(user)}
 
@@ -140,13 +118,13 @@ async def logout(
     response: Response,
     db: AsyncSession = Depends(get_session),  # noqa: B008
 ) -> None:
-    token = request.cookies.get(_COOKIE_NAME)
+    token = request.cookies.get(SESSION_COOKIE_NAME)
     if token:
         await invalidate_session(db, token)
         _log.info("logout: session invalidated")
     else:
         _log.info("logout: no session cookie present")
-    response.delete_cookie(_COOKIE_NAME)
+    response.delete_cookie(SESSION_COOKIE_NAME)
 
 
 @router.get("/session")

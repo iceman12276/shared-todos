@@ -26,6 +26,7 @@ from itsdangerous import BadSignature, URLSafeSerializer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth.cookies import set_auth_cookies
 from app.auth.session import create_session
 from app.config import settings
 from app.db.base import get_session
@@ -66,7 +67,6 @@ async def verify_id_token_dep() -> AsyncGenerator[Any, None]:
 _GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 _GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"  # noqa: S105
 
-_COOKIE_NAME = "session"
 _NONCE_COOKIE = "oauth_state_nonce"
 _NONCE_TTL = 600  # 10 minutes — enough to complete the OAuth dance
 
@@ -100,17 +100,6 @@ def _build_auth_url(state: str) -> str:
         "access_type": "offline",
     }
     return f"{_GOOGLE_AUTH_URL}?{urlencode(params)}"
-
-
-def _set_session_cookie(response: Response, token: str) -> None:
-    response.set_cookie(
-        key=_COOKIE_NAME,
-        value=token,
-        httponly=True,
-        samesite="lax",
-        max_age=settings.session_ttl_days * 86400,
-        secure=settings.cookie_secure,
-    )
 
 
 @router.get("/google")
@@ -246,16 +235,5 @@ async def oauth_google_callback(
         status_code=status.HTTP_302_FOUND,
         headers={"location": f"{settings.frontend_url}/dashboard"},
     )
-    _set_session_cookie(response, session_token)
-    # Set CSRF double-submit cookie so OAuth-authenticated browsers can make
-    # mutating requests. Without this, every post-OAuth API call gets 403.
-    csrf_token = secrets.token_urlsafe(32)
-    response.set_cookie(
-        key="csrf_token",
-        value=csrf_token,
-        httponly=False,  # nosemgrep: fastapi-cookie-httponly-false  # noqa: E501
-        samesite="lax",
-        max_age=settings.session_ttl_days * 86400,
-        secure=settings.cookie_secure,
-    )
+    set_auth_cookies(response, session_token)
     return response
