@@ -3,6 +3,7 @@ from uuid import UUID
 
 import sqlalchemy as sa
 from fastapi import APIRouter, Depends, HTTPException, status
+from psycopg import errors as psy_errors
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -46,14 +47,17 @@ async def create_share(
         await db.commit()
     except IntegrityError as exc:
         await db.rollback()
-        orig = str(exc.orig)
-        if "pk_shares" in orig:
+        if isinstance(exc.orig, psy_errors.UniqueViolation):
             # Duplicate-key race: concurrent request won the insert first
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT, detail="User already has access"
             ) from exc
-        # FK violation: target user deleted between our SELECT and INSERT
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found") from exc
+        if isinstance(exc.orig, psy_errors.ForeignKeyViolation):
+            # FK race: target user deleted between our SELECT and INSERT
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found") from exc
+        # Unknown IntegrityError (CHECK, NOT NULL, or future schema drift) —
+        # re-raise so the 500 handler sees it. Don't silently 404.
+        raise
     await db.refresh(share)
     _log.info("share: created list_id=%s user_id=%s role=%s", perm.list_id, body.user_id, body.role)
     return share

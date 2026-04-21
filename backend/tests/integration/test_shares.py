@@ -17,6 +17,7 @@ from unittest.mock import patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from psycopg import errors as psy_errors
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -305,11 +306,10 @@ async def test_revoke_share_nonexistent(db_session: AsyncSession) -> None:
 
 @pytest.mark.anyio
 async def test_create_share_duplicate_pk_race_returns_409(db_session: AsyncSession) -> None:
-    """Race: SELECT misses concurrent INSERT; PK violation on commit → 409, not 500."""
+    """Race: SELECT misses concurrent INSERT; UniqueViolation on commit → 409, not 500."""
     owner, lst = await _seed(db_session, "owner18@example.com")
     target = await register_user(db_session, "target18@example.com", "T18", "Pass1234!")
 
-    # Simulate the race: patch commit to raise IntegrityError with PK constraint name.
     orig_commit = AsyncSession.commit
     call_count = 0
 
@@ -321,7 +321,7 @@ async def test_create_share_duplicate_pk_race_returns_409(db_session: AsyncSessi
             raise IntegrityError(
                 "INSERT INTO shares ...",
                 {},
-                Exception('duplicate key value violates unique constraint "pk_shares"'),
+                psy_errors.UniqueViolation(),
             )
         await orig_commit(self)
 
@@ -337,7 +337,7 @@ async def test_create_share_duplicate_pk_race_returns_409(db_session: AsyncSessi
 
 @pytest.mark.anyio
 async def test_create_share_fk_violation_returns_404(db_session: AsyncSession) -> None:
-    """Race: target user deleted between SELECT and INSERT; FK violation on commit → 404."""
+    """Race: target user deleted between SELECT and INSERT; ForeignKeyViolation → 404."""
     owner, lst = await _seed(db_session, "owner19@example.com")
     target = await register_user(db_session, "target19@example.com", "T19", "Pass1234!")
 
@@ -351,7 +351,7 @@ async def test_create_share_fk_violation_returns_404(db_session: AsyncSession) -
             raise IntegrityError(
                 "INSERT INTO shares ...",
                 {},
-                Exception('violates foreign key constraint "fk_shares_user_id_users"'),
+                psy_errors.ForeignKeyViolation(),
             )
         await orig_commit(self)
 
@@ -363,3 +363,34 @@ async def test_create_share_fk_violation_returns_404(db_session: AsyncSession) -
             )
 
     assert r.status_code == 404
+
+
+@pytest.mark.anyio
+async def test_create_share_unknown_integrity_error_reraises(db_session: AsyncSession) -> None:
+    """Unknown IntegrityError (CHECK, NOT NULL, etc.) must not be silently swallowed → 500."""
+    owner, lst = await _seed(db_session, "owner20@example.com")
+    target = await register_user(db_session, "target20@example.com", "T20", "Pass1234!")
+
+    orig_commit = AsyncSession.commit
+    call_count = 0
+
+    async def _raise_check_integrity(self: AsyncSession) -> None:
+        nonlocal call_count
+        call_count += 1
+        if call_count >= 2:
+            raise IntegrityError(
+                "INSERT INTO shares ...",
+                {},
+                psy_errors.CheckViolation(),
+            )
+        await orig_commit(self)
+
+    transport = ASGITransport(app=app, raise_app_exceptions=False)
+    with patch.object(AsyncSession, "commit", _raise_check_integrity):
+        async with AsyncClient(transport=transport, base_url=BASE) as c:
+            await _login(c, "owner20@example.com", "Pass1234!")
+            r = await c.post(
+                _shares_url(lst.id), json={"user_id": str(target.id), "role": "viewer"}
+            )
+
+    assert r.status_code == 500
