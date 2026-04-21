@@ -1,0 +1,52 @@
+rules:
+  - id: no-exception-in-except-tuple
+    patterns:
+      - pattern-either:
+          # trailing, no alias: except (A, ..., Exception):
+          - pattern: |
+              try:
+                  ...
+              except ($A, ..., Exception):
+                  ...
+          # trailing, with alias: except (A, ..., Exception) as e:
+          - pattern: |
+              try:
+                  ...
+              except ($A, ..., Exception) as $E:
+                  ...
+          # leading, no alias: except (Exception, A, ...):
+          - pattern: |
+              try:
+                  ...
+              except (Exception, $A, ...):
+                  ...
+          # leading, with alias: except (Exception, A, ...) as e:
+          - pattern: |
+              try:
+                  ...
+              except (Exception, $A, ...) as $E:
+                  ...
+          # middle, no alias: except (A, ..., Exception, B, ...):
+          - pattern: |
+              try:
+                  ...
+              except ($A, ..., Exception, $B, ...):
+                  ...
+          # middle, with alias: except (A, ..., Exception, B, ...) as e:
+          - pattern: |
+              try:
+                  ...
+              except ($A, ..., Exception, $B, ...) as $E:
+                  ...
+    message: >
+      'Exception' in an except tuple defeats exception narrowing.
+      `except (ValueError, Exception)` silently catches everything — the
+      specific types are redundant and unexpected errors are swallowed.
+      Use bare `except ValueError:` or omit 'Exception' from the tuple.
+      See Group G regression class (commit 4a10454) for a concrete example.
+    languages: [python]
+    severity: ERROR
+    metadata:
+      category: security
+      cwe: "CWE-390: Detection of Error Condition Without Action"
+      confidence: HIGH

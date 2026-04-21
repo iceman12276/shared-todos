@@ -42,6 +42,15 @@ uv run alembic revision --autogenerate -m "description"
 uv run pytest tests/test_app_boots.py::test_health_endpoint_responds_200 -v
 ```
 
+### Preflight — run before every `git push`
+
+```bash
+# Runs ruff check + ruff format --check + mypy --strict + pytest,
+# in the same order CI runs them. Catches the "all green locally,
+# red on CI" class of failure cheaply. Convention, not hook.
+./scripts/preflight.sh
+```
+
 CI runs the same commands via 3 parallel jobs (backend / test-quality-gate / security-gate) on PR + master push. `.github/workflows/ci.yml` is the source of truth for exact invocations.
 
 ## Required env
