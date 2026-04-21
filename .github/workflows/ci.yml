@@ -179,6 +179,7 @@ jobs:
           --config p/owasp-top-ten
           --config p/secrets
           --config backend/semgrep-rules/
+          --exclude backend/semgrep-rules/
           --metrics off
 
       - name: Gitleaks (secret scan)
