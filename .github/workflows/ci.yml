@@ -1,3 +1,8 @@
+# template-source: ~/.claude/references/ci-template.yml
+# Derived from the canonical CI template. The `template-drift-check` job
+# below asserts the load-bearing invariants (semgrep ci mode, token wiring,
+# gitleaks presence, SHA-pinned actions). If you intentionally diverge, add
+# a `# template-exception: <reason>` comment explaining why.
 name: ci
 
 on:
@@ -184,3 +189,62 @@ jobs:
         uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  template-drift-check:
+    # Guards against post-authorship drift from the canonical CI template
+    # at ~/.claude/references/ci-template.yml. Pairs with the authorship-time
+    # hook at ~/.claude/hooks/ci-template-guard.py. Greps this file for the
+    # load-bearing invariants that caused PR-1 pain when they were missing.
+    name: ci template drift check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Assert ci.yml matches canonical template essentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORKFLOW=.github/workflows/ci.yml
+          fail() { echo "::error file=$WORKFLOW::drift-check: $1"; exit 1; }
+
+          # Invariant 1 — Semgrep must use cloud-integrated 'semgrep ci' mode.
+          # Offline 'semgrep scan' succeeds locally but uploads nothing to the
+          # Semgrep App dashboard. PR-1 shipped with 'semgrep scan' and the
+          # dashboard had zero full-repo scan history until diagnosed.
+          if grep -qE '^\s*run:.*\bsemgrep scan\b' "$WORKFLOW"; then
+            fail "Found 'semgrep scan' — use 'semgrep ci' (cloud-integrated) per canonical template."
+          fi
+          if ! grep -qE '^\s*run:.*\bsemgrep ci\b' "$WORKFLOW"; then
+            fail "Semgrep step must invoke 'semgrep ci' — not found in any run: line."
+          fi
+
+          # Invariant 2 — SEMGREP_APP_TOKEN must be wired to the semgrep step.
+          # Without it, 'semgrep ci' falls back to offline mode with a warning
+          # that's easy to miss in CI logs.
+          if ! grep -q 'SEMGREP_APP_TOKEN' "$WORKFLOW"; then
+            fail "SEMGREP_APP_TOKEN must be referenced (env for semgrep step)."
+          fi
+
+          # Invariant 3 — Gitleaks secret scan must be present.
+          # Separate from Semgrep's secret rules; catches different patterns.
+          if ! grep -q 'gitleaks/gitleaks-action' "$WORKFLOW"; then
+            fail "Gitleaks action must be present in security gate."
+          fi
+
+          # Invariant 4 — All 'uses:' refs must be 40-char SHA-pinned, not
+          # version tags. Tags are mutable — an attacker compromising the
+          # action's tag could inject code. SHAs are immutable.
+          drift_found=0
+          while IFS= read -r line; do
+            # Extract the ref after @. Strip comments and whitespace.
+            ref=$(printf '%s\n' "$line" | sed -E 's/.*@([^ #]+).*/\1/')
+            if ! printf '%s' "$ref" | grep -qE '^[a-f0-9]{40}$'; then
+              echo "::error file=$WORKFLOW::Unpinned action: $line (ref='$ref') — must be 40-char SHA."
+              drift_found=1
+            fi
+          done < <(grep -E '^\s*(-\s+)?uses:\s+[^ ]+@' "$WORKFLOW")
+          if [ "$drift_found" -eq 1 ]; then
+            fail "One or more actions are not SHA-pinned. See errors above."
+          fi
+
+          echo "OK: ci.yml aligns with canonical template essentials."
