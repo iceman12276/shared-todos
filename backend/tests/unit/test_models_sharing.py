@@ -91,10 +91,11 @@ class TestShareModel:
         constraint_names = {c.name for c in Share.__table__.constraints}  # type: ignore[attr-defined]
         assert any("role_valid" in (n or "") for n in constraint_names)
 
-    def test_composite_unique_list_user(self) -> None:
-        unique_cols = [
-            {c.name for c in uc.columns}
-            for uc in Share.__table__.constraints  # type: ignore[attr-defined]
-            if isinstance(uc, sa.UniqueConstraint)
-        ]
-        assert {"list_id", "user_id"} in unique_cols
+    def test_composite_pk_enforces_uniqueness(self) -> None:
+        # Uniqueness of (list_id, user_id) is guaranteed by the composite PK,
+        # not a separate UniqueConstraint (which would create a redundant index).
+        table: Any = Share.__table__
+        pk_col_names = {c.name for c in table.primary_key}
+        assert pk_col_names == {"list_id", "user_id"}, (
+            "Share composite PK must include exactly list_id and user_id"
+        )

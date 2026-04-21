@@ -1,4 +1,5 @@
 import logging
+from uuid import UUID
 
 import sqlalchemy as sa
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -41,7 +42,7 @@ async def list_items(
 
 @router.patch("/{item_id}", response_model=ItemOut)
 async def update_item(
-    item_id: str,
+    item_id: UUID,
     body: ItemUpdate,
     perm: ListPermission = Depends(require_list_permission("update_item")),  # noqa: B008
     db: AsyncSession = Depends(get_session),  # noqa: B008
@@ -63,7 +64,7 @@ async def update_item(
 
 @router.delete("/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_item(
-    item_id: str,
+    item_id: UUID,
     perm: ListPermission = Depends(require_list_permission("delete_item")),  # noqa: B008
     db: AsyncSession = Depends(get_session),  # noqa: B008
 ) -> None:

@@ -99,7 +99,7 @@ def upgrade() -> None:
             ondelete="CASCADE",
         ),
         sa.PrimaryKeyConstraint("list_id", "user_id", name=op.f("pk_shares")),
-        sa.UniqueConstraint("list_id", "user_id", name=op.f("uq_shares_list_id")),
+        # Uniqueness enforced by composite PK — no separate UniqueConstraint.
     )
     # ### end Alembic commands ###
 

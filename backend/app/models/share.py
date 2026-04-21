@@ -21,5 +21,6 @@ class Share(Base):
 
     __table_args__ = (
         sa.CheckConstraint("role IN ('editor', 'viewer')", name="role_valid"),
-        sa.UniqueConstraint("list_id", "user_id"),
+        # Uniqueness is already enforced by the composite PK (list_id, user_id).
+        # No separate UniqueConstraint needed — it would create a redundant index.
     )
