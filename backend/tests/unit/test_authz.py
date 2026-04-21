@@ -1,7 +1,5 @@
 """Unit tests for authz role-resolution logic."""
 
-import logging
-
 import pytest
 
 from app.authz.permissions import can_perform, effective_role
@@ -24,19 +22,9 @@ class TestEffectiveRole:
         # Owner who also has a share row (shouldn't happen, but be safe)
         assert effective_role(is_owner=True, share_role="viewer") == "owner"
 
-    def test_unknown_share_role_returns_none(self) -> None:
-        assert effective_role(is_owner=False, share_role="superadmin") is None
-
-    def test_unknown_share_role_logs_error(self, caplog: pytest.LogCaptureFixture) -> None:
-        # Re-enable the named logger in case alembic's fileConfig disabled it.
-        named_logger = logging.getLogger("app.authz.permissions")
-        named_logger.disabled = False
-        with caplog.at_level(logging.ERROR, logger="app.authz.permissions"):
+    def test_unknown_share_role_raises(self) -> None:
+        with pytest.raises(ValueError, match="unknown share_role"):
             effective_role(is_owner=False, share_role="superadmin")
-        error_msgs = [r.message for r in caplog.records if r.levelno == logging.ERROR]
-        assert any("unknown" in m.lower() for m in error_msgs), (
-            f"Expected ERROR log for unknown share_role 'superadmin', got: {error_msgs}"
-        )
 
 
 class TestCanPerform:

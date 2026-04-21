@@ -5,10 +5,7 @@ This module contains pure logic — no DB, no FastAPI. Dependency wiring
 lives in app.authz.dependencies.
 """
 
-import logging
 from typing import Literal
-
-_log = logging.getLogger(__name__)
 
 Role = Literal["owner", "editor", "viewer"]
 
@@ -51,7 +48,12 @@ _ALL_ACTIONS = frozenset().union(*_ALLOWED.values())
 def effective_role(*, is_owner: bool, share_role: str | None) -> Role | None:
     """Resolve the caller's effective role for a list.
 
-    Returns None when the caller has no access (stranger → emit 404).
+    Returns None when the caller has no access (stranger → caller receives 404).
+    Raises ValueError for any share_role value that is neither None, 'editor',
+    nor 'viewer' — matching can_perform's raise-on-unknown-input contract.
+    An unknown share_role indicates DB data drift (schema change without migration,
+    or a direct DB edit). It is not a user-facing error; the caller surfaces it
+    as 500 via FastAPI's default exception handler.
     """
     if is_owner:
         return "owner"
@@ -60,7 +62,7 @@ def effective_role(*, is_owner: bool, share_role: str | None) -> Role | None:
     if share_role == "viewer":
         return "viewer"
     if share_role is not None:
-        _log.error("authz: unknown share_role %r — treating as no access", share_role)
+        raise ValueError(f"unknown share_role: {share_role!r}")
     return None
 
 
