@@ -255,3 +255,30 @@ async def test_delete_item_stranger_denied(db_session: AsyncSession) -> None:
         r = await c.delete(_item_url(lst.id, item.id))
 
     assert r.status_code == 404
+
+
+# ── Path parameter validation (UUID coercion) ────────────────────────────────
+
+
+@pytest.mark.anyio
+async def test_patch_item_bad_uuid_returns_422(db_session: AsyncSession) -> None:
+    """PATCH with a non-UUID item_id segment must return 422, not 500."""
+    owner, lst, _ = await _seed(db_session, "owner13@example.com")
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url=BASE) as c:
+        await _login(c, "owner13@example.com", "Pass1234!")
+        r = await c.patch(_item_url(lst.id, "not-a-uuid"), json={"content": "x"})
+
+    assert r.status_code == 422
+
+
+@pytest.mark.anyio
+async def test_delete_item_bad_uuid_returns_422(db_session: AsyncSession) -> None:
+    """DELETE with a non-UUID item_id segment must return 422, not 500."""
+    owner, lst, _ = await _seed(db_session, "owner14@example.com")
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url=BASE) as c:
+        await _login(c, "owner14@example.com", "Pass1234!")
+        r = await c.delete(_item_url(lst.id, "not-a-uuid"))
+
+    assert r.status_code == 422
