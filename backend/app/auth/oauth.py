@@ -1,16 +1,19 @@
-"""Google OAuth 2.0 Authorization Code + PKCE flow (US-103).
+"""Google OAuth 2.0 Authorization Code flow (US-103).
 
 State parameter is signed with itsdangerous AND the nonce is bound to the
 browser session via a short-lived httpOnly cookie (oauth_state_nonce).
 At callback, the nonce extracted from the signed state must match the cookie
-via secrets.compare_digest — this prevents CSRF attacks where an attacker
+via secrets.compare_digest — this prevents OAuth CSRF attacks where an attacker
 initiates OAuth and sends the callback URL to a victim.
 
-The httpx client is injectable as a FastAPI dependency so tests can provide
-a pre-configured mock transport without needing global HTTP interception.
+The httpx client and ID token verifier are injectable FastAPI dependencies so
+tests can substitute test doubles without mocking the google-auth library itself.
+In production, verify_id_token_dep returns a function that calls
+google.oauth2.id_token.verify_oauth2_token — which fetches Google's JWKS,
+verifies RS256 signature, and checks iss/aud/exp.
 """
 
-import base64
+import binascii
 import json
 import logging
 import secrets
@@ -37,6 +40,27 @@ async def get_http_client() -> AsyncGenerator[httpx.AsyncClient, None]:
     """Dependency that yields a shared httpx client. Override in tests."""
     async with httpx.AsyncClient() as client:
         yield client
+
+
+def _production_verify_id_token(id_token: str, client_id: str) -> dict[str, Any]:
+    """Verify a Google ID token using google-auth (RS256 + iss/aud/exp checks)."""
+    import google.auth.transport.requests
+    import google.oauth2.id_token
+
+    grequest = google.auth.transport.requests.Request()
+    claims: dict[str, Any] = google.oauth2.id_token.verify_oauth2_token(  # type: ignore[no-untyped-call]
+        id_token, grequest, client_id
+    )
+    return claims
+
+
+async def verify_id_token_dep() -> AsyncGenerator[Any, None]:
+    """FastAPI dependency that yields the active ID token verifier callable.
+
+    Override in tests by replacing this dependency via app.dependency_overrides.
+    In production, yields _production_verify_id_token which calls google-auth.
+    """
+    yield _production_verify_id_token
 
 
 _GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
@@ -76,20 +100,6 @@ def _build_auth_url(state: str) -> str:
         "access_type": "offline",
     }
     return f"{_GOOGLE_AUTH_URL}?{urlencode(params)}"
-
-
-def _decode_id_token_payload(id_token: str) -> dict[str, Any]:
-    """Decode JWT payload without verifying signature (dev/test only path).
-
-    In production, verify the signature against Google's public keys.
-    For v1 scope, we trust the token from Google's own endpoint.
-    """
-    parts = id_token.split(".")
-    if len(parts) < 2:
-        raise ValueError("Invalid id_token format")
-    payload_b64 = parts[1] + "=="  # pad
-    result: dict[str, Any] = json.loads(base64.urlsafe_b64decode(payload_b64))
-    return result
 
 
 def _set_session_cookie(response: Response, token: str) -> None:
@@ -137,6 +147,7 @@ async def oauth_google_callback(
     error: str | None = None,
     db: AsyncSession = Depends(get_session),  # noqa: B008
     http: httpx.AsyncClient = Depends(get_http_client),  # noqa: B008
+    verify_token: Any = Depends(verify_id_token_dep),  # noqa: B008
 ) -> Response:
     """Handle Google's callback, exchange code for tokens, create/link account."""
     if error or code is None:
@@ -177,12 +188,21 @@ async def oauth_google_callback(
         )
 
     token_data = token_r.json()
-    id_token = token_data.get("id_token", "")
+    id_token_str: str = token_data.get("id_token", "")
 
     try:
-        payload = _decode_id_token_payload(id_token)
-    except (ValueError, Exception):
-        _log.error("oauth: id_token decode failed")
+        payload = verify_token(id_token_str, settings.google_client_id)
+    except (ValueError, json.JSONDecodeError, binascii.Error, Exception) as exc:
+        _log.error("oauth: id_token verification failed error=%r", exc)
+        return Response(
+            status_code=status.HTTP_302_FOUND,
+            headers={"location": f"{settings.frontend_url}/register?error=oauth_failed"},
+        )
+
+    # Require email_verified=True — unverified emails from Google Workspace custom
+    # domains could be forged to link attacker-controlled accounts to existing users.
+    if payload.get("email_verified") is not True:
+        _log.warning("oauth: email_verified is not True, rejecting sub=%s", payload.get("sub"))
         return Response(
             status_code=status.HTTP_302_FOUND,
             headers={"location": f"{settings.frontend_url}/register?error=oauth_failed"},
@@ -190,7 +210,7 @@ async def oauth_google_callback(
 
     google_sub = payload.get("sub", "")
     email = payload.get("email", "")
-    display_name = payload.get("name", email.split("@")[0])
+    display_name = payload.get("name", email.split("@")[0] if email else "")
 
     if not google_sub or not email:
         return Response(
@@ -220,11 +240,22 @@ async def oauth_google_callback(
     else:
         _log.info("oauth: existing google user signed in user_id=%s", user.id)
 
-    token = await create_session(db, user.id, ttl_days=settings.session_ttl_days)
+    session_token = await create_session(db, user.id, ttl_days=settings.session_ttl_days)
 
     response = Response(
         status_code=status.HTTP_302_FOUND,
         headers={"location": f"{settings.frontend_url}/dashboard"},
     )
-    _set_session_cookie(response, token)
+    _set_session_cookie(response, session_token)
+    # Set CSRF double-submit cookie so OAuth-authenticated browsers can make
+    # mutating requests. Without this, every post-OAuth API call gets 403.
+    csrf_token = secrets.token_urlsafe(32)
+    response.set_cookie(
+        key="csrf_token",
+        value=csrf_token,
+        httponly=False,  # nosemgrep: fastapi-cookie-httponly-false  # noqa: E501
+        samesite="lax",
+        max_age=settings.session_ttl_days * 86400,
+        secure=settings.cookie_secure,
+    )
     return response
