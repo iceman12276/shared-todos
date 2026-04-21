@@ -4,11 +4,16 @@ Protects all mutating verbs (POST/PUT/PATCH/DELETE) under /api/v1/
 by requiring that the X-CSRF-Token request header matches the csrf_token
 cookie value (constant-time comparison).
 
-Exemptions:
-- /api/v1/auth/login — no session exists yet
-- /api/v1/auth/register — no session exists yet
-- /api/v1/auth/oauth/* — GET-only flow; callback is GET
-- All GET/HEAD/OPTIONS requests (safe verbs per RFC 7231)
+Explicit path exemptions (see _CSRF_EXEMPT_PATHS):
+- /api/v1/auth/login — session doesn't exist yet, no cookie to check
+- /api/v1/auth/register — session doesn't exist yet, no cookie to check
+
+Cookie-presence exemption (see skip-branch below):
+- Requests that arrive without a csrf_token cookie are passed through.
+  This covers unauthenticated flows (password-reset/request) where there
+  is no session to protect. See the inline comment for scope constraints.
+
+All GET/HEAD/OPTIONS requests are skipped as safe verbs per RFC 7231.
 """
 
 import secrets
@@ -36,9 +41,6 @@ class CSRFMiddleware(BaseHTTPMiddleware):
         path = request.url.path
         if path in _CSRF_EXEMPT_PATHS:
             return await call_next(request)
-
-        # OAuth callback is GET-only — no exemption needed, but protect
-        # any future OAuth POST endpoints by NOT exempting the entire prefix.
 
         cookie_token = request.cookies.get(_CSRF_COOKIE, "")
 

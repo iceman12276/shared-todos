@@ -18,7 +18,7 @@ from app.config import settings
 
 _log = logging.getLogger("app.auth.rate_limiter")
 
-# (ip, window_start) -> count of failed attempts
+# ip -> list of failed-attempt timestamps (sliding window, not fixed-window)
 _store: dict[str, list[datetime]] = defaultdict(list)
 _lock = Lock()
 

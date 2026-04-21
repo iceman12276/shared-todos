@@ -3,12 +3,15 @@
 State parameter is signed with itsdangerous AND the nonce is bound to the
 browser session via a short-lived httpOnly cookie (oauth_state_nonce).
 At callback, the nonce extracted from the signed state must match the cookie
-via secrets.compare_digest — this prevents OAuth CSRF attacks where an attacker
-initiates OAuth and sends the callback URL to a victim.
+via secrets.compare_digest. This prevents the OAuth login-CSRF class of attack
+where an attacker initiates the flow, then tricks the victim's browser into
+completing the attacker's callback URL — binding the victim's account to the
+attacker's identity. It does NOT guard against a fully-compromised browser
+session (stolen cookies); that is out of scope for this flow.
 
 The httpx client and ID token verifier are injectable FastAPI dependencies so
 tests can substitute test doubles without mocking the google-auth library itself.
-In production, verify_id_token_dep returns a function that calls
+In production, verify_id_token_dep yields a function that calls
 google.oauth2.id_token.verify_oauth2_token — which fetches Google's JWKS,
 verifies RS256 signature, and checks iss/aud/exp.
 """
