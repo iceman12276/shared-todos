@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 import pytest_asyncio
+import sqlalchemy as sa
 from httpx import ASGITransport, AsyncClient
 
 from app.main import app
@@ -162,9 +163,11 @@ async def test_anti_enum_list_404_body_identical(
 
     assert r_real.status_code == 404
     assert r_ghost.status_code == 404
-    assert r_real.json() == r_ghost.json(), (
+    assert r_real.content == r_ghost.content, (
         "404 body for a stranger-visible real list differs from nonexistent-list 404 "
-        "— this leaks resource existence (OQ-1 anti-enumeration violation)."
+        "— this leaks resource existence (OQ-1 anti-enumeration violation). "
+        "Byte comparison (not JSON equality) catches future middleware fields "
+        "like request_id/trace_id that would reintroduce an enumeration oracle."
     )
 
 
@@ -278,9 +281,10 @@ async def test_delete_list_cascades_items_and_shares(
     seeded: tuple[User, User, User, List, Item],
     db_session: AsyncSession,
 ) -> None:
-    _, _, _, lst, item = seeded
+    _, editor, _, lst, item = seeded
     list_id = lst.id
     item_id = item.id
+    editor_id = editor.id
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url=BASE) as c:
         await _login(c, "oq1_owner@example.com", "Pass1234!")
@@ -292,6 +296,13 @@ async def test_delete_list_cascades_items_and_shares(
     db_session.expire_all()
     assert await db_session.get(List, list_id) is None
     assert await db_session.get(Item, item_id) is None
+    # Share row must also be gone — ondelete="CASCADE" on shares.list_id FK
+    share_result = await db_session.execute(
+        sa.select(Share).where(Share.list_id == list_id, Share.user_id == editor_id)
+    )
+    assert share_result.scalar_one_or_none() is None, (
+        "Share row survived list deletion — ondelete='CASCADE' on shares.list_id not working"
+    )
 
 
 # ── Revocation: revoked editor loses access immediately ──────────────────────
