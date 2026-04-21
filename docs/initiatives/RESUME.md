@@ -1,13 +1,13 @@
-# Resume State — shared-todos-app Initiative (Overnight Pause)
+# Resume State — shared-todos-app Initiative (Overnight Pause #3)
 
-**Saved:** 2026-04-20 ~03:50 America/New_York (overnight pause, validation mid-flight on PR #2)
-**Reason for save:** User is pausing for the night. PR #2 validation is 7/8 streams complete, verdict locked REQUEST_CHANGES. Engineering-lead is staged to fire the remediation cycle on verdict-land. Clean resumption point.
+**Saved:** 2026-04-21 ~05:55 America/New_York (third overnight pause, PR-3 mid-flight)
+**Reason:** User is pausing. PR-3 has 5 of 6 commit groups landed locally on `feat/pr3-sharing`; Group F (OQ-1 full-matrix tests) is in worktree but uncommitted.
 
 ---
 
 ## One-line summary for resuming agent
 
-> PR #2 is open and under validation. 7 of 8 streams done (6 pr-review-toolkit + security-reviewer). **Verdict is LOCKED as REQUEST_CHANGES** regardless of qa-engineer. Validation-lead has a 13-item must-fix list drafted; engineering-lead has a commit-grouping plan A-H (incl. preflight.sh as Group H); backend-dev is unbriefed (by design — hold for formal verdict). Next action on resume: decide whether to wait on qa-engineer (who hasn't started worktree) or close on 7/8 streams, then validation-lead synthesizes, orchestrator posts via `gh pr comment --body-file`, engineering-lead dispatches.
+> PR-1 + PR-2 merged. PR-3 (sharing + authz) mid-engineering: 5 commits on `feat/pr3-sharing` locally, Group F (OQ-1 full-matrix integration tests) file staged but uncommitted. Nothing pushed. On resume: backend-dev finishes Group F → preflight → engineering-lead checkpoint review → push → PR opens → polling picks up → validation dispatches → **auto-merge on PASS per updated skill**. No user-gate delays.
 
 ---
 
@@ -17,12 +17,12 @@
 |-------|-------|
 | Slug | `shared-todos-app` |
 | Repo | https://github.com/iceman12276/shared-todos (public) |
-| Main working tree | `/home/isaac/Desktop/dev/shared-todos` (on `master`, HEAD `a6a5e2c` **unpushed**) |
-| PR-2 worktree | `/home/isaac/Desktop/dev/shared-todos-pr1` (branch `feat/pr2-auth`, HEAD `09fe902`, worktree clean) |
-| `origin/master` pushed HEAD | `a6f77b5` — "Add CLAUDE.md + update RESUME.md post-PR-1-merge" |
-| `origin/feat/pr2-auth` pushed HEAD | `09fe902` — "Fix absolute path in test_alembic_boots.py" |
+| Main working tree | `/home/isaac/Desktop/dev/shared-todos` (on `master`, HEAD `ae7a918`) |
+| PR-3 worktree | `/home/isaac/Desktop/dev/shared-todos-pr3` (on `feat/pr3-sharing` @ `7d892d9`) |
+| `origin/master` HEAD | `da1dae1` (PR-2 squash merge) |
+| `origin/feat/pr3-sharing` | NOT YET PUSHED |
 | Initiative memo | `docs/initiatives/2026-04-19-shared-todos-app.md` |
-| Status | APPROVED — Phase 6 mid-PR-2-validation-cycle |
+| Status | Phase 6 mid-PR-3-engineering, no blockers |
 
 ---
 
@@ -30,119 +30,60 @@
 
 | # | Phase | Status | Notes |
 |---|-------|--------|-------|
-| 0 | Prereqs + team create | ✅ complete | |
-| 1 | CEO meeting | ✅ complete | |
-| 2 | Synthesize memo | ✅ complete | |
-| 3 | User approval gate | ✅ complete | |
-| 4 | Planning (PRD + BSD) | ✅ complete | |
-| 5 | Start polling loop | ⏸ paused overnight | Both cron loops (meta-auditor 2min, validate-new-prs 3min) **deleted** — re-create on resume |
-| 6 | Engineering | 🚧 IN PROGRESS | **PR-1 merged** (commit `f1f1498`). **PR-2 open + under validation**, verdict locked REQUEST_CHANGES, awaiting formal synthesis + post + engineering remediation cycle. |
-| 7 | Pentest | pending | Semgrep installed ✓ |
+| 0-4 | Prereqs + CEO + memo + approval + planning | ✅ complete | |
+| 5 | Polling loop | ⏸ paused overnight | Both cron loops (meta-auditor 2min + validate-new-prs 3min) deleted — re-create on resume |
+| 6 | Engineering | 🚧 IN PROGRESS | **PR-1 merged** (f1f1498), **PR-2 merged** (da1dae1). **PR-3 engineering:** 5/6 commits local, Group F in-flight, not pushed |
+| 7 | Pentest | pending | Release-boundary |
 | 8 | Final verdict | pending | |
-| 9 | Meta-audit + cleanup | pending | Retrospective items accumulating — see below |
+| 9 | Meta-audit + cleanup | pending | 12 retrospective seeds captured through PR-2 in `meta-reports/initiative-findings-through-pr2.md` |
 
 ---
 
-## Where the ball is (priority-ordered on resume)
+## PR-3 state (priority-ordered on resume)
 
-### 1. qa-engineer status — the bottleneck
-- qa-engineer was dispatched at ~07:30 UTC with a brief to checkout `feat/pr2-auth` in a `shared-todos-pr2-qa` worktree, boot real Postgres+mailhog, run the 68-test suite locally, and perform API-level E2E.
-- **As of pause: worktree DOES NOT EXIST** (`git worktree list` shows only main repo + `shared-todos-pr1`). qa-engineer is either stuck, took a different path, or hasn't started.
-- I pinged them with an a/b/c status request (a: haven't started, b: chose different path, c: blocked) — no reply before pause.
-- **On resume, first move:** check qa-engineer's inbox for a reply. If still silent, give them another ~4 min, then have validation-lead close on 7/8 streams (their verdict is already locked — qa findings stack additively).
+### Branch: `feat/pr3-sharing` at `7d892d9` (local only, not pushed)
 
-### 2. Validation-lead synthesis
-- **Verdict locked: REQUEST_CHANGES** regardless of qa-engineer.
-- 13-item must-fix list drafted (see full list in `validation/reports/pr-2-specialists/*.md` + message history).
-- Validation-lead will produce:
-  - 4-Ws PR review body (save to `/tmp/pr2-review-body.md`)
-  - `validation/reports/pr-2.md` — narrative synthesis
-  - Label plan: remove `claude-validating`, add `claude-validated:v1` + `claude-validated:changes-requested`
-- **On resume:** message validation-lead with "qa-engineer status N; proceed with synthesis on [7|8] streams"
+**Commits landed (geometric build, TDD throughout):**
+1. `72bf4e8` — **Group A:** List, Item, Share models + alembic migration
+2. `ac670f2` — **Group B:** authz layer (role resolution + OQ-1 `stranger → 404` enforcement)
+3. `2a5b820` — **Group C:** list CRUD endpoints (POST/GET-list/GET/PATCH/DELETE)
+4. `977f539` — **Group D:** item CRUD endpoints + integration tests
+5. `7d892d9` — **Group E:** share CRUD endpoints + integration tests
 
-### 3. Post verdict + engineering-lead fires remediation
-- Use `gh pr comment --body-file /tmp/pr2-review-body.md` (self-review block on `gh pr review --request-changes` is documented CLAUDE.md quirk)
-- Use `gh api -X POST repos/iceman12276/shared-todos/issues/2/labels` for label-add (gh pr edit hits projects-classic GraphQL error)
-- Engineering-lead is pre-briefed + staged with:
-  - Commit groups A-G covering the 13 blockers
-  - Group H = `scripts/preflight.sh` (approved to include — 2-of-3 CI-red patterns neutralized)
-  - Concession framing approved: "the following contradict my earlier 'do NOT fix' list…" — protects backend-dev trust
-- **On resume after verdict post:** engineering-lead gets the green-light to fire backend-dev brief.
+**In-flight (uncommitted):**
+- Untracked: `backend/tests/integration/test_oq1_matrix.py` — **Group F** OQ-1 full-matrix integration suite (cross-endpoint stranger-404 verification)
 
----
+### First move on resume: finish Group F + push
 
-## Current PR-2 validation artifacts
+1. Backend-dev completes `test_oq1_matrix.py` (matrix covering: stranger × {list, item, share} × {POST/GET/PATCH/DELETE} → all 404, body byte-identical to nonexistent-list 404)
+2. Backend-dev runs `./scripts/preflight.sh` in `shared-todos-pr3/backend/` — must pass (ruff + ruff format --check + mypy --strict + pytest)
+3. Backend-dev hits **checkpoint gate** — reply to engineering-lead with Group F SHA + per-commit summary for all 6 groups + preflight output + local test count
+4. Engineering-lead **SHA-pinned pre-review** — runs `git diff` against landing SHAs for any committed-file edits; specifically:
+   - `git diff 2a5b820..HEAD -- backend/tests/integration/test_lists.py` (verify no assertion-weakening)
+   - `git diff ac670f2..HEAD -- backend/tests/unit/test_authz.py` (verify no assertion-weakening)
+5. Engineering-lead replies "push approved" ACK
+6. Backend-dev pushes to origin + runs `gh pr create --body-file <5W+H body>`
+7. CI fires → polling loop picks up on next tick → validation dispatches → **auto-merge on PASS** per updated skill
 
-**Saved to repo (survive restart):**
-- `validation/reports/pr-2-specialists/pr2-review-code-reviewer.md` — 3 CRITICAL, 4 HIGH, 4 INFO
-- `validation/reports/pr-2-specialists/pr2-review-pr-test-analyzer.md` — 3 CRITICAL gaps, 2 HIGH gaps, 5 MEDIUM
-- `validation/reports/pr-2-specialists/pr2-review-silent-failure-hunter.md` — 8 CRITICAL, 6 HIGH, 5 MEDIUM + SYSTEMIC "no logging in app/"
-- `validation/reports/pr-2-specialists/pr2-review-type-design-analyzer.md` — 2 MEDIUM, 5 LOW, convention-setter PASS
-- `validation/reports/pr-2-specialists/pr2-review-comment-analyzer.md` — 5 HIGH (bug-encoding), 6 missing WHY, 4 dead WHAT
-- `validation/reports/pr-2-specialists/pr2-review-code-simplifier.md` — 8 real wins (incl. 2 dead-code, 1 latent bug fix)
-- `security/reports/pr-2.md` — 15KB (committed at `a6a5e2c`, local-only, will push with batch)
+### Scope reminder (PRD-3 + BSD-3)
 
-**Ephemeral (will be lost on reboot, regenerable):**
-- `/tmp/pr2-diff.patch` — `gh pr diff 2 > /tmp/pr2-diff.patch` to regenerate
-- `/tmp/pr2-view.json` — `gh pr view 2 --json number,title,body,author,commits,files > /tmp/pr2-view.json` to regenerate
+**Load-bearing constraint — OQ-1:** stranger → 404 on every verb, never 403. Already enforced in Group B's `require_list_permission` dependency. Group F is the integration-level verification.
+
+**Anti-enumeration:** share to non-registered-email → 404 (not 400). Already in Group E via share-create handler.
 
 ---
 
-## Consolidated 13-item must-fix list (validation-lead's draft, endorsed by orchestrator)
+## Validation / merge pipeline (auto per updated workflow)
 
-**CRITICAL (4):**
-1. OAuth ID token signature verification + iss/aud/exp (authlib 1.7.0 OR google-auth — NOT authlib 1.5.2)
-2. Missing logging infrastructure — add `app/logging_config.py`, instrument auth events
-3. `secret_key` + `google_client_id` + `google_client_secret` fail-fast Settings parity
-4. OAuth auto-link on unverified email — require `payload.get("email_verified") is True`
+**Key change from PR-2:** `validate-new-prs` skill now includes Step 2.9 — **auto-merge on PASS** via `gh pr merge {n} --squash --delete-branch`. No user-gate delay. Commits ship end-to-end once validation is clean.
 
-**HIGH (6):**
-5. OAuth callback csrf_token cookie not set — hoist `_set_auth_cookies` to shared module
-6. `except (ValueError, Exception)` catch-all in id_token decode — narrow + log
-7. X-Forwarded-For bypass in rate_limiter — drop unconditional trust, add `trust_proxy: bool = False`
-8. `password_reset_complete` non-atomic (2 commits → lockout) — single transaction
-9. `Session.token` stored RAW vs `PasswordResetToken.token_hash` hashed — parity fix
-10. `authlib==1.5.2` has 12 CVEs in dead dep — drop OR upgrade to 1.7.0 with item #1
+Exception cases (skill preserves manual review):
+- Verdict is REQUEST_CHANGES — no merge attempted
+- Synthesis body says "user merges manually" (rare)
+- CLAUDE.md says merges need human review
+- User conversational override
 
-**MEDIUM (3):**
-11. `User` missing CheckConstraint on `password_hash IS NOT NULL OR google_sub IS NOT NULL`
-12. `_DUMMY_HASH` timing invariant not locked by test
-13. OAuth iss/aud/exp claims (covered by #1 if fixed together)
-
-**INFO (record, not blocking):**
-- CSRF-skip scope — INFO per security-reviewer adjudication (`/complete` requires 32-byte token; `/request` spam-bounded)
-- SMTP TLS toggle, `mailhog:latest` floating tag
-
-**Accepted false positive (carried from PR-1 v3):** `_engine` underscore import precedent.
-
----
-
-## Engineering commit grouping (endorsed by orchestrator, staged at eng-lead)
-
-- **A:** logging infrastructure (CRITICAL-2) — foundational for D/E log-fixes
-- **B:** fail-fast Settings (CRITICAL-3) — Pydantic `model_validator`
-- **C:** OAuth signature + iss/aud/exp + email_verified + authlib-drop (CRITICAL-1, -4, MEDIUM-13, HIGH-10) — single pyproject.toml touch
-- **D:** CSRF cookie hoist + except narrow (HIGH-5, -6)
-- **E:** XFF + single-transaction reset + Session.token hash (HIGH-7, -8, -9)
-- **F:** User CheckConstraint + _DUMMY_HASH test + CSRF-scope INFO comment (MEDIUM-11, -12, INFO)
-- **G (optional):** 5 comment-analyzer docstring accuracy fixes
-- **H:** `scripts/preflight.sh` (ruff check && ruff format --check && mypy --strict && pytest) + CLAUDE.md Commands section update — Phase 9 retrospective item closed opportunistically
-
----
-
-## Phase 9 retrospective seeds (running list)
-
-Observations to fold into the meta-audit at initiative end:
-
-1. **`mcp__time__*` tool-surface gap** — backend-dev (PR-1 bodies) + engineering-lead (PR-2 body) both had to hack around missing date tool. Low-risk, high-frequency. Consider adding to standard allowlist for document-authoring agents.
-2. **CI-red "all green locally" pattern** — now 3-for-3 (PR-1 semgrep, PR-2 ruff format, PR-2 absolute path). Preflight.sh (Group H) neutralizes 2 of 3. 3rd (absolute paths) needs a separate grep-based gate.
-3. **Orchestrator cadence feedback applied successfully** — 2-idle-sweep ping threshold worked as-designed in multiple episodes this session. Memory file `feedback_orchestrator_cadence.md` is stable and load-bearing.
-4. **Meta-auditor worktree-vs-remote heuristic correction** — meta-auditor initially flagged false-positive "stall" when backend-dev had uncommitted work in the worktree. Corrected their own heuristic mid-session. Record as self-correcting audit pattern.
-5. **Engineering-lead "do NOT fix" list tightening** — pre-open review should kill only things where fix is demonstrably wrong. Things with BOTH defensible skip AND fix → let validation surface. Eng-lead identified this self-retrospective on PR-2.
-6. **"Code-scope vs exploitability-scope" adjudication pattern** — silent-failure-hunter flags a broader code-scope finding; security-reviewer pins exploitability scope; validation-lead records BOTH halves. Distilled pattern for future rubric.
-7. **"Convention-erosion = escalate" principle** — validation-lead escalated `secret_key` default from MEDIUM to CRITICAL on convention-erosion grounds (PR-1 fail-fast Settings was a trust-root pattern). Record alongside "convergent signal = escalate" memory.
-8. **`gh` workarounds** — persistent projects-classic GraphQL error on `gh pr edit`. Workaround: `gh api -X POST repos/.../issues/N/labels`. Already in CLAUDE.md.
-9. **Validation-lead multi-stream synthesis taking ~15-20 min on 13 blockers** — acceptable given convergent-signal analysis depth; don't optimize prematurely.
+Expected PR-3 validation: narrow scope (no new deps, no CI changes beyond schemas, no architectural shifts). Previously-established patterns apply: SHA-pinned review, empirical meta-tests, shared-fixture discipline.
 
 ---
 
@@ -153,23 +94,61 @@ Observations to fold into the meta-audit at initiative end:
 | Q1. Sharing target | Registered-users-only |
 | Q2. Permissions model | Owner / Editor / Viewer |
 | Q3. Auth method | Email+password + Google OAuth |
-| Q4. Password reset | Yes (with mailhog dev, real SMTP prod) |
-| Q5. Realtime updates | Hard requirement (WebSocket + Postgres LISTEN/NOTIFY) |
+| Q4. Password reset | Yes |
+| Q5. Realtime updates | Hard requirement (PR-5) |
 | Q6. Repo | Public GitHub |
+| **OQ-1** | stranger → 404 on every verb, never 403 |
 
-OQ-1 (authz): stranger → 404 on every verb, never 403.
+---
+
+## Durable artifacts pushed to master (ae7a918+)
+
+- `validation/reports/pr-1.md` (PR-1 3-cycle synthesis + v3 PASS)
+- `validation/reports/pr-2.md`, `pr-2-v2.md`, `pr-2-v3.md`, `pr-2-v4.md` (PR-2 4-cycle arc)
+- `validation/qa-reports/pr-2.md` (deferred-stream recovery)
+- `validation/reports/pr-2-specialists/*.md` (6 v1 specialist reports)
+- `security/reports/pr-1.md`, `pr-2.md`, `pr-2-v2.md`, `pr-2-v3.md`, `pr-2-v4.md`
+- `docs/planning/prd-{1,2,3}-*.md` + `bsd-{1,2,3}-*.md`
+- `docs/architecture/realtime-transport-decision.md` (PR-5 pin)
+- `docs/initiatives/2026-04-19-shared-todos-app.md` (approved memo)
+- **`meta-reports/initiative-findings-through-pr2.md`** (comprehensive meta-audit, ~4800 words, 10+ findings + 12 Phase 9 seeds)
+
+---
+
+## 12 Phase 9 retrospective seeds captured (from meta-audit)
+
+Full detail in `meta-reports/initiative-findings-through-pr2.md`. Summary:
+
+1. **SHA-pin verification** — worktree Read alone is unsafe; pin SHA before reasoning
+2. **Empirical-over-static-analysis** — running a tool beats reading a tool
+3. **Shared-fixture discipline** — multi-specialist meta-tests need shared fixture sets
+4. **Fixture intersection requirement** — non-overlapping fixtures can produce illusory consensus
+5. **Claim-code contract accuracy** — commit-body claims must match empirical behavior
+6. **Auto-merge on PASS** — no manual-merge gap (already fixed in `validate-new-prs` skill)
+7. **Orchestrator-run empirical tiebreakers** — cheaper than specialist round-trips when specialists disagree on tool behavior
+8. **Durable artifacts cite classes not SHAs** — SHAs rot under rebase/squash
+9. **Trust implementer scope adjustments that match intent** — ruff-vs-pytest example
+10. **/tmp handoff isolation** — deliverables belong in repo-tracked paths
+11. **No duplicate agent spawns** — captured as project memory (backend-dev-2 incident)
+12. **Stale-log SHA-confusion** — CI log reads must record the head-SHA they pertain to
 
 ---
 
 ## Resume prompt for next session
 
 ```
-Read /home/isaac/Desktop/dev/shared-todos/docs/initiatives/RESUME.md in full. We paused overnight 
-with PR #2 (auth backend) mid-validation — 7/8 streams done, verdict locked REQUEST_CHANGES. 
-First move: check qa-engineer's status (they hadn't created the worktree as of pause). 
-If still silent after ~4 min or if user wants to close on 7/8 streams, proceed: validation-lead 
-synthesizes, orchestrator posts verdict via `gh pr comment --body-file` + applies labels via 
-`gh api issues/2/labels`, engineering-lead fires backend-dev brief (13 blockers in groups A-H 
-including preflight.sh). Re-arm the cron loops (meta-auditor 2min, validate-new-prs 3min) 
-after verdict is posted so the next tick picks up engineering's fix push.
+Read /home/isaac/Desktop/dev/shared-todos/docs/initiatives/RESUME.md in full.
+We paused overnight with PR-3 (sharing + authz) mid-engineering:
+5 of 6 commits landed locally on `feat/pr3-sharing` @ 7d892d9,
+Group F (OQ-1 full-matrix integration tests) file uncommitted in worktree.
+PRs 1+2 already merged to master. PR-3 not yet pushed.
+
+On resume:
+1. Re-arm crons (meta-auditor 2min + validate-new-prs 3min)
+2. Ping backend-dev via engineering-lead to complete Group F
+3. Checkpoint gate → preflight → push → PR open
+4. Polling picks up → validation dispatches → auto-merge on PASS
+
+Per updated `validate-new-prs` skill, PASS verdict triggers auto-merge.
+No user-gate delays between PR-3 and PR-4.
 ```
