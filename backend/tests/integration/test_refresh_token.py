@@ -268,87 +268,174 @@ async def test_reuse_detection_invalidates_session() -> None:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# US-405: all 401 paths return indistinguishable responses
+# US-405: byte-identical 401 across all 5 failure modes (I5)
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+def _response_signature(r: object) -> tuple[int, bytes, tuple[tuple[str, str], ...]]:
+    """Comparable fingerprint: (status, body_bytes, sorted_headers_excluding_volatile)."""
+    from httpx import Response as HttpxResponse
+
+    assert isinstance(r, HttpxResponse)
+    headers = tuple(
+        sorted(
+            (k.lower(), v)
+            for k, v in r.headers.items()
+            # set-cookie intentionally differs on success vs failure paths;
+            # date and content-length vary by clock / body size
+            if k.lower() not in ("set-cookie", "date", "content-length")
+        )
+    )
+    return (r.status_code, r.content, headers)
+
+
+@pytest.mark.anyio
+async def test_all_401_paths_return_byte_identical_response(
+    db_session: AsyncSession,
+) -> None:
+    """All five 401 failure modes must be byte-identical at the wire (OQ-4a / US-405).
+
+    Uses content == comparison (not body["detail"]) to catch future middleware
+    fields like request_id or trace headers that would reintroduce an
+    enumeration oracle.  Mirrors test_oq1_matrix.py:166 (r_real.content ==
+    r_ghost.content).
+    """
+    transport = ASGITransport(app=app)
+
+    # Mode 1: no cookie
+    async with AsyncClient(transport=transport, base_url=BASE) as c:
+        r_no_cookie = await c.post(_REFRESH)
+
+    # Mode 2: unknown token (never issued)
+    async with AsyncClient(transport=transport, base_url=BASE) as c:
+        c.cookies.set(REFRESH_COOKIE_NAME, "totally-unknown-token-xyz", domain="test")
+        r_unknown = await c.post(_REFRESH)
+
+    # Mode 3: expired token (seeded directly in DB)
+    async with AsyncClient(transport=transport, base_url=BASE) as c:
+        await _register_and_login(c)
+        from sqlalchemy import select as _select
+
+        user_res = await db_session.execute(_select(User).where(User.email == _EMAIL))
+        u = user_res.scalar_one()
+    raw_expired = "expired-raw-token-value"
+    rt = RefreshToken(
+        family_id=uuid4(),
+        user_id=u.id,
+        token_hash=hash_token(raw_expired),
+        issued_at=datetime.now(UTC) - timedelta(days=31),
+        expires_at=datetime.now(UTC) - timedelta(seconds=1),
+    )
+    db_session.add(rt)
+    await db_session.commit()
+    async with AsyncClient(transport=transport, base_url=BASE) as c:
+        c.cookies.set(REFRESH_COOKIE_NAME, raw_expired, domain="test")
+        r_expired = await c.post(_REFRESH)
+
+    # Mode 4: revoked token (rotated away)
+    async with AsyncClient(transport=transport, base_url=BASE) as c:
+        await _register_and_login(c)
+        old_token = c.cookies.get(REFRESH_COOKIE_NAME)
+        assert old_token is not None
+        await c.post(_REFRESH)
+    async with AsyncClient(transport=transport, base_url=BASE) as c:
+        c.cookies.set(REFRESH_COOKIE_NAME, old_token, domain="test")
+        r_revoked = await c.post(_REFRESH)
+
+    # Mode 5: reuse detection (same as revoked for a different family)
+    async with AsyncClient(transport=transport, base_url=BASE) as c:
+        await _register_and_login(c)
+        reuse_old = c.cookies.get(REFRESH_COOKIE_NAME)
+        assert reuse_old is not None
+        await c.post(_REFRESH)
+    async with AsyncClient(transport=transport, base_url=BASE) as c:
+        c.cookies.set(REFRESH_COOKIE_NAME, reuse_old, domain="test")
+        r_reused = await c.post(_REFRESH)
+
+    responses = [r_no_cookie, r_unknown, r_expired, r_revoked, r_reused]
+    labels = ["no_cookie", "unknown", "expired", "revoked", "reuse_detection"]
+    baseline = _response_signature(r_no_cookie)
+    for label, resp in zip(labels[1:], responses[1:], strict=False):
+        sig = _response_signature(resp)
+        assert sig == baseline, (
+            f"401 failure mode '{label}' diverged from 'no_cookie' baseline — "
+            f"this leaks distinguishing information. sig={sig!r} baseline={baseline!r}"
+        )
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Invariant I2: atomicity under partial failure (failure injection)
 # ──────────────────────────────────────────────────────────────────────────────
 
 
 @pytest.mark.anyio
-@pytest.mark.parametrize(
-    "scenario",
-    [
-        "no_cookie",
-        "unknown_token",
-        "expired_token",
-        "revoked_token",
-        "reuse_detection",
-    ],
-    ids=["no_cookie", "unknown_token", "expired_token", "revoked_token", "reuse_detection"],
-)
-async def test_all_401_paths_return_identical_response(
-    scenario: str, db_session: AsyncSession
+async def test_reuse_detection_is_atomic_under_partial_failure(
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """All failure modes must return identical HTTP status + body (PRD-4 success metric)."""
+    """Failure mid-reuse-detection must not leave the family partially revoked (I2).
+
+    Monkey-patches invalidate_sessions_by_family to raise RuntimeError after
+    revoke_family stages its UPDATE.  The transaction must roll back entirely —
+    asserted via positive evidence: the valid token's revoked_at is still NULL.
+    """
+    from sqlalchemy import select as _select
+
+    import app.auth.router as auth_router
+
+    # Register + login to get a token family
     async with AsyncClient(transport=ASGITransport(app=app), base_url=BASE) as c:
-        if scenario == "no_cookie":
-            r = await c.post(_REFRESH)
+        await _register_and_login(c)
+        valid_token = c.cookies.get(REFRESH_COOKIE_NAME)
+        assert valid_token is not None
+        old_token = valid_token
+        # Rotate once so old_token is revoked (reuse-detection target)
+        await c.post(_REFRESH)
+        current_token = c.cookies.get(REFRESH_COOKIE_NAME)
+        assert current_token is not None
 
-        elif scenario == "unknown_token":
-            c.cookies.set(REFRESH_COOKIE_NAME, "totally-unknown-token-xyz", domain="test")
-            r = await c.post(_REFRESH)
+    # Verify current_token's DB entry is active before injection
+    db_session.expire_all()
+    current_hash = hash_token(current_token)
+    result = await db_session.execute(
+        _select(RefreshToken).where(RefreshToken.token_hash == current_hash)
+    )
+    current_rt = result.scalar_one()
+    family_id = current_rt.family_id
+    assert current_rt.revoked_at is None, "precondition: current token is active"
 
-        elif scenario == "expired_token":
-            # Seed an expired token directly in the DB
-            await _register_and_login(c)
-            from sqlalchemy import select as _select
+    # Inject failure into session invalidation so the transaction aborts
+    async def _raise(*args: object, **kwargs: object) -> None:
+        raise RuntimeError("injected failure — simulates mid-revocation crash")
 
-            user_res = await db_session.execute(_select(User).where(User.email == _EMAIL))
-            u = user_res.scalar_one()
-            raw_expired = "expired-raw-token-value"
-            rt = RefreshToken(
-                family_id=uuid4(),
-                user_id=u.id,
-                token_hash=hash_token(raw_expired),
-                issued_at=datetime.now(UTC) - timedelta(days=31),
-                expires_at=datetime.now(UTC) - timedelta(seconds=1),
-            )
-            db_session.add(rt)
-            await db_session.commit()
-            # Use a fresh client with ONLY the expired token (no valid registered token)
-            async with AsyncClient(transport=ASGITransport(app=app), base_url=BASE) as c2:
-                c2.cookies.set(REFRESH_COOKIE_NAME, raw_expired, domain="test")
-                r = await c2.post(_REFRESH)
+    monkeypatch.setattr(auth_router, "invalidate_sessions_by_family", _raise)
 
-        elif scenario == "revoked_token":
-            await _register_and_login(c)
-            old_refresh = c.cookies.get(REFRESH_COOKIE_NAME)
-            assert old_refresh is not None
-            # Rotate — makes old token revoked
-            await c.post(_REFRESH)
+    # Present the OLD (rotated-away) token to trigger reuse detection
+    async with AsyncClient(transport=ASGITransport(app=app), base_url=BASE) as c2:
+        c2.cookies.set(REFRESH_COOKIE_NAME, old_token, domain="test")
+        r = await c2.post(_REFRESH)
 
-            # Present the rotated-away token via a fresh client (reuse detection path)
-            async with AsyncClient(transport=ASGITransport(app=app), base_url=BASE) as c2:
-                c2.cookies.set(REFRESH_COOKIE_NAME, old_refresh, domain="test")
-                r = await c2.post(_REFRESH)
+    # Request fails (500 acceptable for injected internal error)
+    assert r.status_code in {401, 500}, f"expected 401 or 500, got {r.status_code}"
 
-        else:  # reuse_detection — identical path, alias for clarity
-            await _register_and_login(c)
-            old = c.cookies.get(REFRESH_COOKIE_NAME)
-            assert old is not None
-            await c.post(_REFRESH)
-
-            async with AsyncClient(transport=ASGITransport(app=app), base_url=BASE) as c2:
-                c2.cookies.set(REFRESH_COOKIE_NAME, old, domain="test")
-                r = await c2.post(_REFRESH)
-
-    assert r.status_code == 401
-    body = r.json()
-    # All paths must return the same top-level key and identical body content
-    assert "detail" in body
-    assert body["detail"] == "Session expired. Please log in again."
+    # Positive-evidence: DB state must NOT be partially revoked
+    # The current active token must still be active (no partial revocation window)
+    db_session.expire_all()
+    result2 = await db_session.execute(
+        _select(RefreshToken).where(
+            RefreshToken.family_id == family_id,
+            RefreshToken.revoked_at.is_(None),
+        )
+    )
+    active_rows = result2.scalars().all()
+    assert len(active_rows) == 1, (
+        f"I2 atomicity violated: expected 1 active token after aborted revocation, "
+        f"got {len(active_rows)}.  Family was partially revoked."
+    )
+    assert active_rows[0].token_hash == current_hash
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Invariant I3: no raw token material in logs
+# Invariant I3: no raw token material in logs + positive structured-field check
 # ──────────────────────────────────────────────────────────────────────────────
 
 
@@ -363,6 +450,44 @@ async def test_no_raw_token_in_logs(caplog: pytest.LogCaptureFixture) -> None:
             await c.post(_REFRESH)
 
     assert raw_refresh not in caplog.text
+
+
+@pytest.mark.anyio
+async def test_refresh_logs_contain_structured_fields(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Rotation log line must contain family_id= and user_id= fields (I3 positive side).
+
+    Absence-only (no raw token in logs) cannot distinguish 'logs are safe'
+    from 'log lines were silently removed'.  This test adds the positive
+    complement: structured fields ARE present.
+    """
+    import logging as _logging
+
+    # alembic.fileConfig(disable_existing_loggers=True) may have disabled this
+    # logger if test_alembic_boots ran first in the session.
+    _logging.getLogger("app.auth").disabled = False
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url=BASE) as c:
+        await _register_and_login(c)
+        raw_refresh = c.cookies.get(REFRESH_COOKIE_NAME)
+        assert raw_refresh is not None
+        with caplog.at_level(logging.INFO, logger="app.auth"):
+            r = await c.post(_REFRESH)
+
+    assert r.status_code == 200
+
+    refresh_msgs = [rec.message for rec in caplog.records if "refresh" in rec.message.lower()]
+    assert refresh_msgs, f"expected at least one 'refresh' log line, got: {caplog.text!r}"
+    assert any("family_id=" in m for m in refresh_msgs), (
+        f"no structured family_id= field in refresh logs: {refresh_msgs}"
+    )
+    assert any("user_id=" in m for m in refresh_msgs), (
+        f"no structured user_id= field in refresh logs: {refresh_msgs}"
+    )
+    # Negative: raw token value must not appear in any log line
+    for msg in refresh_msgs:
+        assert raw_refresh not in msg, f"raw token leaked into log: {msg[:80]}..."
 
 
 # ──────────────────────────────────────────────────────────────────────────────
