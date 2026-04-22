@@ -27,7 +27,10 @@ from itsdangerous import BadSignature, URLSafeSerializer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.cookies import set_auth_cookies
+from uuid import uuid4
+
+from app.auth.cookies import set_auth_cookies, set_refresh_cookie
+from app.auth.refresh_service import create_refresh_token
 from app.auth.session import create_session
 from app.config import settings
 from app.db.base import get_session
@@ -235,11 +238,23 @@ async def oauth_google_callback(
     else:
         _log.info("oauth: existing google user signed in user_id=%s", user.id)
 
-    session_token = await create_session(db, user.id, ttl_days=settings.session_ttl_days)
+    family_id = uuid4()
+    session_token = await create_session(
+        db, user.id, ttl_days=settings.session_ttl_days, family_id=family_id, commit=False
+    )
+    raw_refresh, _ = await create_refresh_token(
+        db,
+        user_id=user.id,
+        family_id=family_id,
+        parent_id=None,
+        ttl_days=settings.refresh_token_ttl_days,
+    )
+    await db.commit()
 
     response = Response(
         status_code=status.HTTP_302_FOUND,
         headers={"location": f"{settings.frontend_url}/dashboard"},
     )
     set_auth_cookies(response, session_token)
+    set_refresh_cookie(response, raw_refresh, ttl_days=settings.refresh_token_ttl_days)
     return response
