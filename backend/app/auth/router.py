@@ -3,9 +3,11 @@ import secrets
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
+import psycopg.errors as psy_errors
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy import delete as sa_delete
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.cookies import (
@@ -73,7 +75,15 @@ async def _issue_credentials(db: AsyncSession, response: Response, user_id: UUID
         parent_id=None,
         ttl_days=settings.refresh_token_ttl_days,
     )
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError as exc:
+        await db.rollback()
+        if isinstance(exc.orig, psy_errors.UniqueViolation | psy_errors.ForeignKeyViolation):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail=_SESSION_EXPIRED_MSG
+            ) from exc
+        raise
     set_auth_cookies(response, session_token)
     set_refresh_cookie(response, raw_refresh, ttl_days=settings.refresh_token_ttl_days)
 
@@ -206,7 +216,15 @@ async def refresh_token_endpoint(
         # Atomic: revoke entire family + all associated sessions in one transaction
         await revoke_family(db, revoked_rt.family_id)
         await invalidate_sessions_by_family(db, revoked_rt.family_id, commit=False)
-        await db.commit()
+        try:
+            await db.commit()
+        except IntegrityError as exc:
+            await db.rollback()
+            if isinstance(exc.orig, psy_errors.UniqueViolation | psy_errors.ForeignKeyViolation):
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED, detail=_SESSION_EXPIRED_MSG
+                ) from exc
+            raise
         _log.warning("refresh: reuse detected, family revoked family_id=%s", revoked_rt.family_id)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=_SESSION_EXPIRED_MSG)
 
@@ -215,7 +233,10 @@ async def refresh_token_endpoint(
         # No match, expired, or unknown — same 401 (US-405)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=_SESSION_EXPIRED_MSG)
 
-    # Rotate: revoke old token, issue new refresh token + new session atomically (I1, I2)
+    # Rotate: revoke old token, issue new refresh token + new session atomically (I1, I2).
+    # The partial unique index uq_refresh_tokens_active_family enforces at most one active
+    # token per family at the DB level — a concurrent caller that also passes
+    # get_valid_refresh_token will hit UniqueViolation on INSERT and collapse to 401.
     new_raw_refresh, _ = await rotate_refresh_token(
         db, valid_rt, ttl_days=settings.refresh_token_ttl_days
     )
@@ -226,7 +247,16 @@ async def refresh_token_endpoint(
         family_id=valid_rt.family_id,
         commit=False,
     )
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError as exc:
+        await db.rollback()
+        if isinstance(exc.orig, psy_errors.UniqueViolation | psy_errors.ForeignKeyViolation):
+            # Concurrent rotation loser — collapses to the uniform 401 (preserves I5)
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail=_SESSION_EXPIRED_MSG
+            ) from exc
+        raise
 
     set_auth_cookies(response, new_session_token)
     set_refresh_cookie(response, new_raw_refresh, ttl_days=settings.refresh_token_ttl_days)

@@ -151,22 +151,17 @@ async def test_revoke_family_revokes_all_members(db_session: AsyncSession) -> No
     raw1, rt1 = await create_refresh_token(
         db_session, user_id=user.id, family_id=family_id, parent_id=None, ttl_days=30
     )
-    # Simulate a rotated chain: rt2 is the "current" active token
+    # Rotate: rt1 becomes revoked, rt2 is the current active token in the chain
     _, rt2 = await rotate_refresh_token(db_session, rt1, ttl_days=30)
-    # Grab the raw for rt2 by creating a fresh token in the same family
-    raw_root, rt_root = await create_refresh_token(
-        db_session, user_id=user.id, family_id=family_id, parent_id=None, ttl_days=30
-    )
+    await db_session.commit()
 
     await revoke_family(db_session, family_id)
 
-    # All tokens in this family must be revoked
+    # Both tokens in this family must be revoked (rt1 already was; rt2 now is too)
     await db_session.refresh(rt1)
     await db_session.refresh(rt2)
-    await db_session.refresh(rt_root)
     assert rt1.revoked_at is not None
     assert rt2.revoked_at is not None
-    assert rt_root.revoked_at is not None
 
 
 @pytest.mark.anyio

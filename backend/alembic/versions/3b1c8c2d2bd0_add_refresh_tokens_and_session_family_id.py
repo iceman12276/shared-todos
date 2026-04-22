@@ -51,6 +51,18 @@ def upgrade() -> None:
     op.create_index(
         op.f("ix_refresh_tokens_token_hash"), "refresh_tokens", ["token_hash"], unique=True
     )
+    # Partial unique index: at most one active (non-revoked) token per family.
+    # Closes the concurrent-rotation race: two callers both passing
+    # get_valid_refresh_token → second INSERT hits UniqueViolation (not a
+    # silent I1 violation with two live siblings). Partial because revoked
+    # tokens must remain for audit and reuse-detection lookups.
+    op.create_index(
+        "uq_refresh_tokens_active_family",
+        "refresh_tokens",
+        ["family_id"],
+        unique=True,
+        postgresql_where=sa.text("revoked_at IS NULL"),
+    )
     # OQ-4b: add family_id FK to sessions so that family revocation can invalidate
     # the associated session without a timestamp-proximity heuristic.
     # Nullable: existing sessions pre-date refresh tokens and have no family.
@@ -65,6 +77,7 @@ def downgrade() -> None:
     """Downgrade schema."""
     op.drop_index(op.f("ix_sessions_family_id"), table_name="sessions")
     op.drop_column("sessions", "family_id")
+    op.drop_index("uq_refresh_tokens_active_family", table_name="refresh_tokens")
     op.drop_index(op.f("ix_refresh_tokens_token_hash"), table_name="refresh_tokens")
     op.drop_index(op.f("ix_refresh_tokens_family_id"), table_name="refresh_tokens")
     op.drop_table("refresh_tokens")
