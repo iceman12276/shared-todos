@@ -153,7 +153,6 @@ async def test_revoke_family_revokes_all_members(db_session: AsyncSession) -> No
     )
     # Simulate a rotated chain: rt2 is the "current" active token
     _, rt2 = await rotate_refresh_token(db_session, rt1, ttl_days=30)
-    raw2_raw = secrets.token_urlsafe(32)
     # Grab the raw for rt2 by creating a fresh token in the same family
     raw_root, rt_root = await create_refresh_token(
         db_session, user_id=user.id, family_id=family_id, parent_id=None, ttl_days=30

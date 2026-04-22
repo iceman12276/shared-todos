@@ -27,7 +27,6 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.cookies import REFRESH_COOKIE_NAME, SESSION_COOKIE_NAME
-from app.auth.refresh_service import create_refresh_token
 from app.auth.tokens import hash_token
 from app.main import app
 from app.models.refresh_token import RefreshToken
@@ -41,7 +40,7 @@ _REFRESH = "/api/v1/auth/refresh"
 _SESSION = "/api/v1/auth/session"
 
 _EMAIL = "refresh@example.com"
-_PASSWORD = "Password123!"
+_PASSWORD = "Password123!"  # noqa: S105
 
 
 async def _register_and_login(client: AsyncClient) -> None:
@@ -80,9 +79,7 @@ async def test_refresh_cookie_is_httponly(db_session: AsyncSession) -> None:
     async with AsyncClient(transport=ASGITransport(app=app), base_url=BASE) as c:
         r = await c.post(_REGISTER, json={"email": _EMAIL, "password": _PASSWORD})
     set_cookie_headers = r.headers.get_list("set-cookie")
-    refresh_header = next(
-        (h for h in set_cookie_headers if REFRESH_COOKIE_NAME in h), None
-    )
+    refresh_header = next((h for h in set_cookie_headers if REFRESH_COOKIE_NAME in h), None)
     assert refresh_header is not None
     assert "HttpOnly" in refresh_header
 
@@ -92,9 +89,7 @@ async def test_refresh_cookie_is_samesite_lax(db_session: AsyncSession) -> None:
     async with AsyncClient(transport=ASGITransport(app=app), base_url=BASE) as c:
         r = await c.post(_REGISTER, json={"email": _EMAIL, "password": _PASSWORD})
     set_cookie_headers = r.headers.get_list("set-cookie")
-    refresh_header = next(
-        (h for h in set_cookie_headers if REFRESH_COOKIE_NAME in h), None
-    )
+    refresh_header = next((h for h in set_cookie_headers if REFRESH_COOKIE_NAME in h), None)
     assert refresh_header is not None
     assert "SameSite=lax" in refresh_header
 
@@ -131,7 +126,6 @@ async def test_refresh_response_body_is_empty_or_minimal() -> None:
     assert r.status_code == 200
     # Body must not contain anything resembling a token value
     body_text = r.text
-    old_session = ""  # we don't have the value here — just check no long random string
     assert len(body_text) < 200  # should be minimal
 
 
@@ -141,6 +135,7 @@ async def test_refresh_old_token_cannot_be_used_again() -> None:
     async with AsyncClient(transport=ASGITransport(app=app), base_url=BASE) as c:
         await _register_and_login(c)
         old_refresh = c.cookies.get(REFRESH_COOKIE_NAME)
+        assert old_refresh is not None
 
         # First refresh — succeeds, rotates token
         r1 = await c.post(_REFRESH)
@@ -183,6 +178,7 @@ async def test_logout_prevents_refresh(db_session: AsyncSession) -> None:
     async with AsyncClient(transport=ASGITransport(app=app), base_url=BASE) as c:
         await _register_and_login(c)
         refresh_before_logout = c.cookies.get(REFRESH_COOKIE_NAME)
+        assert refresh_before_logout is not None
         await c.post(_LOGOUT)
 
     # Fresh client — replay the pre-logout refresh token (should be revoked)
@@ -202,6 +198,7 @@ async def test_logout_with_family_revokes_all_family_sessions(
         # Rotate once to create a two-token family chain
         await c.post(_REFRESH)
         refresh_after_rotate = c.cookies.get(REFRESH_COOKIE_NAME)
+        assert refresh_after_rotate is not None
         await c.post(_LOGOUT)
 
     # After logout, the rotated token (current before logout) must also be revoked
@@ -222,11 +219,13 @@ async def test_reuse_detection_revokes_entire_family() -> None:
     async with AsyncClient(transport=ASGITransport(app=app), base_url=BASE) as c:
         await _register_and_login(c)
         old_refresh = c.cookies.get(REFRESH_COOKIE_NAME)
+        assert old_refresh is not None
 
         # Legitimate rotation
         r1 = await c.post(_REFRESH)
         assert r1.status_code == 200
         new_refresh = c.cookies.get(REFRESH_COOKIE_NAME)
+        assert new_refresh is not None
 
     transport = ASGITransport(app=app)
 
@@ -249,7 +248,9 @@ async def test_reuse_detection_invalidates_session() -> None:
     async with AsyncClient(transport=ASGITransport(app=app), base_url=BASE) as c:
         await _register_and_login(c)
         old_refresh = c.cookies.get(REFRESH_COOKIE_NAME)
+        assert old_refresh is not None
         session_before_reuse = c.cookies.get(SESSION_COOKIE_NAME)
+        assert session_before_reuse is not None
 
         # Rotate legitimately — new session issued
         await c.post(_REFRESH)
@@ -299,6 +300,7 @@ async def test_all_401_paths_return_identical_response(
             # Seed an expired token directly in the DB
             await _register_and_login(c)
             from sqlalchemy import select as _select
+
             user_res = await db_session.execute(_select(User).where(User.email == _EMAIL))
             u = user_res.scalar_one()
             raw_expired = "expired-raw-token-value"
@@ -319,6 +321,7 @@ async def test_all_401_paths_return_identical_response(
         elif scenario == "revoked_token":
             await _register_and_login(c)
             old_refresh = c.cookies.get(REFRESH_COOKIE_NAME)
+            assert old_refresh is not None
             # Rotate — makes old token revoked
             await c.post(_REFRESH)
 
@@ -330,6 +333,7 @@ async def test_all_401_paths_return_identical_response(
         else:  # reuse_detection — identical path, alias for clarity
             await _register_and_login(c)
             old = c.cookies.get(REFRESH_COOKIE_NAME)
+            assert old is not None
             await c.post(_REFRESH)
 
             async with AsyncClient(transport=ASGITransport(app=app), base_url=BASE) as c2:
@@ -354,6 +358,7 @@ async def test_no_raw_token_in_logs(caplog: pytest.LogCaptureFixture) -> None:
     async with AsyncClient(transport=ASGITransport(app=app), base_url=BASE) as c:
         await _register_and_login(c)
         raw_refresh = c.cookies.get(REFRESH_COOKIE_NAME)
+        assert raw_refresh is not None
         with caplog.at_level(logging.DEBUG):
             await c.post(_REFRESH)
 
@@ -369,13 +374,12 @@ async def test_no_raw_token_in_logs(caplog: pytest.LogCaptureFixture) -> None:
 async def test_migration_is_reversible() -> None:
     """Verify the refresh_tokens migration can be applied and reversed cleanly."""
     import anyio
+
     import alembic.command
     import alembic.config
 
     def _run_alembic() -> None:
-        cfg = alembic.config.Config(
-            "/home/isaac/Desktop/dev/shared-todos-pr4/backend/alembic.ini"
-        )
+        cfg = alembic.config.Config("/home/isaac/Desktop/dev/shared-todos-pr4/backend/alembic.ini")
         alembic.command.downgrade(cfg, "4df1779548df")
         alembic.command.upgrade(cfg, "head")
 

@@ -11,8 +11,14 @@ from app.models.user import User
 
 
 async def create_session(
-    db: AsyncSession, user_id: UUID, ttl_days: int, *, family_id: UUID | None = None
+    db: AsyncSession,
+    user_id: UUID,
+    ttl_days: int,
+    *,
+    family_id: UUID | None = None,
+    commit: bool = True,
 ) -> str:
+    """Create a new session record. Pass commit=False to batch into a larger transaction."""
     raw_token = secrets.token_urlsafe(32)
     expires_at = datetime.now(UTC) + timedelta(days=ttl_days)
     session = Session(
@@ -22,7 +28,8 @@ async def create_session(
         family_id=family_id,
     )
     db.add(session)
-    await db.commit()
+    if commit:
+        await db.commit()
     return raw_token
 
 

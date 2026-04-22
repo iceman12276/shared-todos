@@ -4,10 +4,16 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from sqlalchemy import delete as sa_delete, select
+from sqlalchemy import delete as sa_delete
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.cookies import REFRESH_COOKIE_NAME, SESSION_COOKIE_NAME, set_auth_cookies, set_refresh_cookie
+from app.auth.cookies import (
+    REFRESH_COOKIE_NAME,
+    SESSION_COOKIE_NAME,
+    set_auth_cookies,
+    set_refresh_cookie,
+)
 from app.auth.dependencies import require_auth
 from app.auth.email import send_password_reset_email
 from app.auth.password import hash_password, make_dummy_hash, verify_password
@@ -49,9 +55,7 @@ def _user_out(user: User) -> dict:  # type: ignore[type-arg]
     return {"id": str(user.id), "email": user.email, "display_name": user.display_name}
 
 
-async def _issue_credentials(
-    db: AsyncSession, response: Response, user_id: UUID
-) -> None:
+async def _issue_credentials(db: AsyncSession, response: Response, user_id: UUID) -> None:
     """Issue session + refresh token in one atomic commit. Sets both cookies.
 
     Both credentials share a new family_id. Session is staged without
@@ -194,9 +198,7 @@ async def refresh_token_endpoint(
     raw = request.cookies.get(REFRESH_COOKIE_NAME)
 
     if not raw:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail=_SESSION_EXPIRED_MSG
-        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=_SESSION_EXPIRED_MSG)
 
     # Reuse detection: token exists in DB but is already revoked (I2)
     revoked_rt = await get_revoked_refresh_token(db, raw)
@@ -205,19 +207,13 @@ async def refresh_token_endpoint(
         await revoke_family(db, revoked_rt.family_id)
         await invalidate_sessions_by_family(db, revoked_rt.family_id, commit=False)
         await db.commit()
-        _log.warning(
-            "refresh: reuse detected, family revoked family_id=%s", revoked_rt.family_id
-        )
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail=_SESSION_EXPIRED_MSG
-        )
+        _log.warning("refresh: reuse detected, family revoked family_id=%s", revoked_rt.family_id)
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=_SESSION_EXPIRED_MSG)
 
     valid_rt = await get_valid_refresh_token(db, raw)
     if valid_rt is None:
         # No match, expired, or unknown — same 401 (US-405)
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail=_SESSION_EXPIRED_MSG
-        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=_SESSION_EXPIRED_MSG)
 
     # Rotate: revoke old token, issue new refresh token + new session atomically (I1, I2)
     new_raw_refresh, _ = await rotate_refresh_token(

@@ -2,7 +2,12 @@
 
 from fastapi.responses import JSONResponse
 
-from app.auth.cookies import REFRESH_COOKIE_NAME, SESSION_COOKIE_NAME, set_auth_cookies, set_refresh_cookie
+from app.auth.cookies import (
+    REFRESH_COOKIE_NAME,
+    SESSION_COOKIE_NAME,
+    set_auth_cookies,
+    set_refresh_cookie,
+)
 
 
 def test_set_auth_cookies_sets_session_cookie() -> None:

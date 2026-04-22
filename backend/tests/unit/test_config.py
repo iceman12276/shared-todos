@@ -87,7 +87,7 @@ def test_refresh_token_ttl_days_default_is_30() -> None:
     """refresh_token_ttl_days must default to 30 (PRD-4 requirement)."""
     s = _build_settings()
     assert hasattr(s, "refresh_token_ttl_days")
-    assert s.refresh_token_ttl_days == 30  # type: ignore[attr-defined]
+    assert s.refresh_token_ttl_days == 30
 
 
 def test_refresh_token_ttl_days_is_configurable() -> None:

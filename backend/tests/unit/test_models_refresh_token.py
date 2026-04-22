@@ -2,7 +2,6 @@
 
 from typing import Any
 
-import pytest
 import sqlalchemy as sa
 
 from app.models.refresh_token import RefreshToken
@@ -30,25 +29,27 @@ class TestRefreshTokenModelStructure:
 
     def test_family_id_indexed(self) -> None:
         table: Any = RefreshToken.__table__
-        index_cols = {
-            frozenset(idx.columns.keys())
-            for idx in table.indexes
-        }
+        index_cols = {frozenset(idx.columns.keys()) for idx in table.indexes}
         assert frozenset({"family_id"}) in index_cols
 
     def test_token_hash_indexed(self) -> None:
         table: Any = RefreshToken.__table__
-        index_cols = {
-            frozenset(idx.columns.keys())
-            for idx in table.indexes
-        }
+        index_cols = {frozenset(idx.columns.keys()) for idx in table.indexes}
         assert frozenset({"token_hash"}) in index_cols
 
     def test_required_columns_exist(self) -> None:
         table: Any = RefreshToken.__table__
         col_names = set(table.c.keys())
-        required = {"id", "family_id", "user_id", "token_hash", "parent_token_id",
-                    "issued_at", "expires_at", "revoked_at"}
+        required = {
+            "id",
+            "family_id",
+            "user_id",
+            "token_hash",
+            "parent_token_id",
+            "issued_at",
+            "expires_at",
+            "revoked_at",
+        }
         assert required <= col_names
 
     def test_revoked_at_is_nullable(self) -> None:
@@ -90,20 +91,20 @@ class TestRefreshTokenDefaults:
 
     def test_revoked_at_defaults_to_none(self) -> None:
         rt = RefreshToken(
-            family_id=None,  # type: ignore[arg-type]
-            user_id=None,  # type: ignore[arg-type]
-            token_hash="x",
-            issued_at=None,  # type: ignore[arg-type]
-            expires_at=None,  # type: ignore[arg-type]
+            family_id=None,
+            user_id=None,
+            token_hash="x",  # noqa: S106
+            issued_at=None,
+            expires_at=None,
         )
         assert rt.revoked_at is None
 
     def test_parent_token_id_defaults_to_none(self) -> None:
         rt = RefreshToken(
-            family_id=None,  # type: ignore[arg-type]
-            user_id=None,  # type: ignore[arg-type]
-            token_hash="x",
-            issued_at=None,  # type: ignore[arg-type]
-            expires_at=None,  # type: ignore[arg-type]
+            family_id=None,
+            user_id=None,
+            token_hash="x",  # noqa: S106
+            issued_at=None,
+            expires_at=None,
         )
         assert rt.parent_token_id is None

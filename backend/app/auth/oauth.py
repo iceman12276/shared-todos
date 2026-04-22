@@ -20,14 +20,13 @@ import logging
 import secrets
 from collections.abc import AsyncGenerator
 from typing import Any
+from uuid import uuid4
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from itsdangerous import BadSignature, URLSafeSerializer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from uuid import uuid4
 
 from app.auth.cookies import set_auth_cookies, set_refresh_cookie
 from app.auth.refresh_service import create_refresh_token
