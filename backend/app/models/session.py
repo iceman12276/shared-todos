@@ -15,3 +15,6 @@ class Session(Base):
     token_hash: Mapped[str] = mapped_column(sa.String(64), unique=True, index=True)
     expires_at: Mapped[datetime]
     created_at: Mapped[datetime] = mapped_column(server_default=sa.func.now())
+    # OQ-4b: links this session to the refresh token family that issued it.
+    # Nullable for sessions created before PR-4 (pre-refresh-token sessions).
+    family_id: Mapped[UUID | None] = mapped_column(sa.Uuid(), nullable=True, index=True)
