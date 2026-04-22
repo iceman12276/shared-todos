@@ -2,7 +2,12 @@
 
 from fastapi.responses import JSONResponse
 
-from app.auth.cookies import SESSION_COOKIE_NAME, set_auth_cookies
+from app.auth.cookies import (
+    REFRESH_COOKIE_NAME,
+    SESSION_COOKIE_NAME,
+    set_auth_cookies,
+    set_refresh_cookie,
+)
 
 
 def test_set_auth_cookies_sets_session_cookie() -> None:
@@ -34,3 +39,33 @@ def test_set_auth_cookies_csrf_is_random() -> None:
     csrf1 = next(h for h in r1.headers.getlist("set-cookie") if "csrf_token" in h)
     csrf2 = next(h for h in r2.headers.getlist("set-cookie") if "csrf_token" in h)
     assert csrf1 != csrf2
+
+
+def test_set_refresh_cookie_sets_httponly_cookie() -> None:
+    response = JSONResponse(content={})
+    set_refresh_cookie(response, "raw_refresh_token", ttl_days=30)
+    headers = response.headers.getlist("set-cookie")
+    refresh = [h for h in headers if REFRESH_COOKIE_NAME in h]
+    assert len(refresh) == 1
+    assert "raw_refresh_token" in refresh[0]
+    assert "HttpOnly" in refresh[0]
+
+
+def test_set_refresh_cookie_is_samesite_lax() -> None:
+    response = JSONResponse(content={})
+    set_refresh_cookie(response, "tok", ttl_days=30)
+    headers = response.headers.getlist("set-cookie")
+    refresh = next(h for h in headers if REFRESH_COOKIE_NAME in h)
+    assert "SameSite=lax" in refresh
+
+
+def test_set_refresh_cookie_max_age_matches_ttl() -> None:
+    response = JSONResponse(content={})
+    set_refresh_cookie(response, "tok", ttl_days=14)
+    headers = response.headers.getlist("set-cookie")
+    refresh = next(h for h in headers if REFRESH_COOKIE_NAME in h)
+    assert "Max-Age=1209600" in refresh  # 14 * 86400
+
+
+def test_refresh_cookie_name_is_distinct_from_session() -> None:
+    assert REFRESH_COOKIE_NAME != SESSION_COOKIE_NAME

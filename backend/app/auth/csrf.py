@@ -27,6 +27,8 @@ _MUTATING_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 _CSRF_EXEMPT_PATHS = {
     "/api/v1/auth/login",
     "/api/v1/auth/register",
+    # refresh is called when the session (and thus csrf_token cookie) has expired
+    "/api/v1/auth/refresh",
 }
 
 _CSRF_COOKIE = "csrf_token"

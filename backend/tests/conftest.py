@@ -11,7 +11,7 @@ from app.db.base import _engine
 _factory: async_sessionmaker[AsyncSession] = async_sessionmaker(_engine, expire_on_commit=False)
 
 _TRUNCATE = text(
-    "TRUNCATE TABLE shares, items, lists, sessions, password_reset_tokens, users"
+    "TRUNCATE TABLE refresh_tokens, shares, items, lists, sessions, password_reset_tokens, users"
     " RESTART IDENTITY CASCADE"
 )
 

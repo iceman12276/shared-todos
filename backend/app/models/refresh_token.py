@@ -7,14 +7,16 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.db.base import Base
 
 
-class Session(Base):
-    __tablename__ = "sessions"
+class RefreshToken(Base):
+    __tablename__ = "refresh_tokens"
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    family_id: Mapped[UUID] = mapped_column(sa.Uuid(), index=True)
     user_id: Mapped[UUID] = mapped_column(sa.ForeignKey("users.id", ondelete="CASCADE"))
     token_hash: Mapped[str] = mapped_column(sa.String(64), unique=True, index=True)
+    parent_token_id: Mapped[UUID | None] = mapped_column(
+        sa.ForeignKey("refresh_tokens.id", ondelete="SET NULL"), nullable=True
+    )
+    issued_at: Mapped[datetime]
     expires_at: Mapped[datetime]
-    created_at: Mapped[datetime] = mapped_column(server_default=sa.func.now())
-    # OQ-4b: links this session to the refresh token family that issued it.
-    # Nullable for sessions created before PR-4 (pre-refresh-token sessions).
-    family_id: Mapped[UUID | None] = mapped_column(sa.Uuid(), nullable=True, index=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(nullable=True)
