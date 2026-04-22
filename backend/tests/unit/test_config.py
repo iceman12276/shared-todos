@@ -81,3 +81,22 @@ def test_dev_defaults_allowed_when_cookie_secure_false() -> None:
         google_client_secret="",
     )
     assert result is not None
+
+
+def test_refresh_token_ttl_days_default_is_30() -> None:
+    """refresh_token_ttl_days must default to 30 (PRD-4 requirement)."""
+    s = _build_settings()
+    assert hasattr(s, "refresh_token_ttl_days")
+    assert s.refresh_token_ttl_days == 30  # type: ignore[attr-defined]
+
+
+def test_refresh_token_ttl_days_is_configurable() -> None:
+    """refresh_token_ttl_days must be overridable via env."""
+    s = _build_settings(refresh_token_ttl_days=14)
+    assert s.refresh_token_ttl_days == 14  # type: ignore[attr-defined]
+
+
+def test_refresh_token_ttl_days_minimum_is_1() -> None:
+    """refresh_token_ttl_days must reject values below 1."""
+    with pytest.raises(ValidationError):
+        _build_settings(refresh_token_ttl_days=0)

@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     # Session signing — must be set in production; dev default is only for local/CI
     secret_key: str = _DEV_SECRET_KEY
     session_ttl_days: int = Field(default=7, ge=1, le=365)
+    refresh_token_ttl_days: int = Field(default=30, ge=1, le=365)
 
     # Rate limiting: login attempts per IP per window
     rate_limit_login_attempts: int = Field(default=10, ge=1)
