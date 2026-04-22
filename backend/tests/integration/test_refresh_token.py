@@ -373,13 +373,18 @@ async def test_no_raw_token_in_logs(caplog: pytest.LogCaptureFixture) -> None:
 @pytest.mark.anyio
 async def test_migration_is_reversible() -> None:
     """Verify the refresh_tokens migration can be applied and reversed cleanly."""
+    from pathlib import Path
+
     import anyio
 
     import alembic.command
     import alembic.config
 
+    # test file is backend/tests/integration/test_*.py — three .parent hops reach backend/
+    alembic_ini = Path(__file__).parent.parent.parent / "alembic.ini"
+
     def _run_alembic() -> None:
-        cfg = alembic.config.Config("/home/isaac/Desktop/dev/shared-todos-pr4/backend/alembic.ini")
+        cfg = alembic.config.Config(str(alembic_ini))
         alembic.command.downgrade(cfg, "4df1779548df")
         alembic.command.upgrade(cfg, "head")
 
